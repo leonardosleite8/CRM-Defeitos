@@ -149,6 +149,7 @@ export async function updateDefectCardFields(
     severidade: DefectSeveridade;
     modelo_produto: string[];
     linha: string[];
+    media_urls: string[];
     responsavel: string;
     status: DefectStatus;
     previsao_conclusao: string | null;

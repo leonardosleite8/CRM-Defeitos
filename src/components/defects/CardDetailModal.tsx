@@ -19,10 +19,26 @@ import { CreatableMultiSelect } from "./CreatableMultiSelect";
 import { DateBRPickerInput } from "./DateBRPickerInput";
 import { CommentRichEditor, type CommentEditorHandle } from "./CommentRichEditor";
 import { CommentDisplay } from "./CommentDisplay";
-import { X } from "lucide-react";
+import { buildStoragePath, uploadFileWithProgress } from "@/lib/upload";
+import { FileText, X } from "lucide-react";
 
 function isVideoUrl(url: string) {
   return /\.(mp4|webm|mov|m4v)(\?|$)/i.test(url);
+}
+
+function isImageUrl(url: string) {
+  return /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i.test(url);
+}
+
+function fileNameFromUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    const path = parsed.pathname;
+    const file = path.split("/").pop() ?? "arquivo";
+    return decodeURIComponent(file);
+  } catch {
+    return "arquivo";
+  }
 }
 
 export function CardDetailModal({
@@ -58,6 +74,9 @@ export function CardDetailModal({
   const [linhaOptions, setLinhaOptions] = useState<string[]>([...LINHAS]);
   const [editPrevisao, setEditPrevisao] = useState("");
   const [saving, setSaving] = useState(false);
+  const [filesToUpload, setFilesToUpload] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (!open || !cardId) {
@@ -156,6 +175,34 @@ export function CardDetailModal({
     }
   };
 
+  const uploadAttachments = async () => {
+    if (!cardId || !card || filesToUpload.length === 0) return;
+    setUploading(true);
+    setErr(null);
+    try {
+      const urls: string[] = [];
+      for (let i = 0; i < filesToUpload.length; i++) {
+        const file = filesToUpload[i];
+        const key = `${i}-${file.name}`;
+        const path = buildStoragePath(boardId, cardId, file);
+        const { publicUrl } = await uploadFileWithProgress(file, path, (pct) => {
+          setUploadProgress((prev) => ({ ...prev, [key]: pct }));
+        });
+        urls.push(publicUrl);
+      }
+      const merged = Array.from(new Set([...(card.media_urls ?? []), ...urls]));
+      await updateDefectCardFields(cardId, boardId, { media_urls: merged });
+      setFilesToUpload([]);
+      setUploadProgress({});
+      await reload();
+      router.refresh();
+    } catch (ex) {
+      setErr(ex instanceof Error ? ex.message : "Erro ao enviar anexos");
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleDelete = async () => {
     if (!cardId) return;
     if (!confirm("Excluir este card permanentemente?")) return;
@@ -165,6 +212,21 @@ export function CardDetailModal({
       router.refresh();
     } catch (ex) {
       setErr(ex instanceof Error ? ex.message : "Erro");
+    }
+  };
+
+  const removeAttachment = async (urlToRemove: string) => {
+    if (!cardId || !card) return;
+    const ok = confirm("Tem certeza que deseja apagar este anexo?");
+    if (!ok) return;
+    setErr(null);
+    try {
+      const next = (card.media_urls ?? []).filter((u) => u !== urlToRemove);
+      await updateDefectCardFields(cardId, boardId, { media_urls: next });
+      await reload();
+      router.refresh();
+    } catch (ex) {
+      setErr(ex instanceof Error ? ex.message : "Erro ao apagar anexo");
     }
   };
 
@@ -322,21 +384,94 @@ export function CardDetailModal({
                 </ul>
 
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-900">Mídia</h3>
+                  <h3 className="text-sm font-semibold text-slate-900">Anexos</h3>
+                  <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <label className="block text-sm font-medium text-slate-700">
+                      Adicionar anexos (fotos, vídeos, PDF, DOC, Excel)
+                      <input
+                        type="file"
+                        multiple
+                        accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.csv"
+                        className="mt-1 w-full text-sm"
+                        onChange={(e) => setFilesToUpload(Array.from(e.target.files ?? []))}
+                      />
+                    </label>
+                    {filesToUpload.length > 0 ? (
+                      <ul className="mt-2 space-y-1 text-xs text-slate-600">
+                        {filesToUpload.map((f, i) => {
+                          const key = `${i}-${f.name}`;
+                          const pct = uploadProgress[key];
+                          return (
+                            <li key={key} className="flex items-center justify-between gap-2">
+                              <span className="truncate">{f.name}</span>
+                              <span>{pct != null ? `${pct}%` : "pendente"}</span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : null}
+                    <div className="mt-2">
+                      <button
+                        type="button"
+                        disabled={uploading || filesToUpload.length === 0}
+                        onClick={uploadAttachments}
+                        className="rounded-lg bg-blue-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-950 disabled:opacity-50"
+                      >
+                        {uploading ? "Enviando..." : "Enviar anexos"}
+                      </button>
+                    </div>
+                  </div>
                   <div className="mt-2 grid gap-3 sm:grid-cols-2">
                     {(card.media_urls ?? []).map((url) =>
                       isVideoUrl(url) ? (
-                        <video key={url} src={url} controls className="w-full rounded-lg border border-slate-200 bg-black" />
+                        <div key={url} className="rounded-lg border border-slate-200 bg-white p-2">
+                          <video src={url} controls className="w-full rounded-lg bg-black" />
+                          <button
+                            type="button"
+                            onClick={() => removeAttachment(url)}
+                            className="mt-2 rounded border border-red-300 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50"
+                          >
+                            Apagar anexo
+                          </button>
+                        </div>
+                      ) : isImageUrl(url) ? (
+                        <div key={url} className="rounded-lg border border-slate-200 bg-white p-2">
+                          <a href={url} target="_blank" rel="noreferrer" className="block">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={url} alt="" className="max-h-48 w-full rounded-lg object-contain" />
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => removeAttachment(url)}
+                            className="mt-2 rounded border border-red-300 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50"
+                          >
+                            Apagar anexo
+                          </button>
+                        </div>
                       ) : (
-                        <a key={url} href={url} target="_blank" rel="noreferrer" className="block">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={url} alt="" className="max-h-48 w-full rounded-lg border border-slate-200 object-contain" />
-                        </a>
+                        <div key={url} className="rounded-lg border border-slate-200 bg-white p-2">
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-2 rounded-lg p-2 text-sm text-blue-900 hover:bg-blue-50"
+                          >
+                            <FileText className="h-4 w-4 shrink-0" />
+                            <span className="line-clamp-1">{fileNameFromUrl(url)}</span>
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => removeAttachment(url)}
+                            className="mt-2 rounded border border-red-300 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50"
+                          >
+                            Apagar anexo
+                          </button>
+                        </div>
                       ),
                     )}
                   </div>
                   {(!card.media_urls || card.media_urls.length === 0) && (
-                    <p className="text-sm text-slate-500">Nenhuma mídia anexada.</p>
+                    <p className="text-sm text-slate-500">Nenhum anexo.</p>
                   )}
                 </div>
               </>

@@ -267,11 +267,11 @@ export function NewDefectModal({
             </label>
           </div>
           <label className="block text-sm font-medium text-slate-700">
-            Fotos e vídeos
+            Anexos (fotos, vídeos, PDF, DOC, Excel)
             <input
               type="file"
               multiple
-              accept="image/*,video/*"
+              accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.csv"
               className="mt-1 w-full text-sm"
               onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
             />
