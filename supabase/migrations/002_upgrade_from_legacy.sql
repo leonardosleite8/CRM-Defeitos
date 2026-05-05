@@ -1,0 +1,12 @@
+-- Opcional: migração manual de bancos que rodaram a versão antiga do 001_init.sql.
+-- Recomendado para projetos novos: criar projeto limpo e rodar apenas o 001_init.sql atual.
+--
+-- Passos de alto nível (ajuste e teste em cópia antes de produção):
+-- 1) Fazer backup.
+-- 2) Migrar dados de modelo_produto/linha TEXT -> TEXT[] (ex.: ARRAY[modelo_produto]).
+-- 3) Mapear status antigos -> novos (ex.: Análise/Ação Corretiva/Validação -> Aguardando ou Em execução).
+-- 4) Remover tabela defect_card_logs e coluna numero_serie se existirem.
+-- 5) Recriar tipo defect_status ou usar coluna TEXT temporária — enums no PostgreSQL exigem cuidado.
+--
+-- Por simplicidade, para bases legadas costuma ser mais seguro exportar dados,
+-- recriar o schema com o 001_init.sql atual e reimportar os cards necessários.
