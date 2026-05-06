@@ -1,7 +1,8 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { listBoards } from "@/lib/queries/boards";
 import { createBoardWithDefaults } from "@/app/actions/defeitos";
 import { ConfigAlert } from "@/components/ConfigAlert";
+import { formatDateBR, formatDateTimeBR } from "@/lib/date";
 import { Plus, LayoutGrid } from "lucide-react";
 
 function hasEnv() {
@@ -36,7 +37,7 @@ export default async function HomePage() {
         <form
           action={async () => {
             "use server";
-            const id = await createBoardWithDefaults(`Quadro ${new Date().toLocaleDateString("pt-BR")}`);
+            const id = await createBoardWithDefaults(`Quadro ${formatDateBR(new Date().toISOString())}`);
             const { redirect } = await import("next/navigation");
             redirect(`/quadros/${id}`);
           }}
@@ -73,7 +74,7 @@ export default async function HomePage() {
               >
                 <h2 className="font-semibold text-slate-900">{b.titulo}</h2>
                 <p className="mt-1 text-xs text-slate-500">
-                  Atualizado em {new Date(b.updated_at).toLocaleString("pt-BR")}
+                  Atualizado em {formatDateTimeBR(b.updated_at)}
                 </p>
               </Link>
             </li>

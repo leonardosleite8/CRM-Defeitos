@@ -11,6 +11,21 @@ export function formatDateBR(iso: string | null | undefined): string {
   });
 }
 
+/** Data e hora no formato brasileiro DD/MM/AAAA HH:mm (fuso de São Paulo). */
+export function formatDateTimeBR(iso: string | null | undefined): string {
+  if (iso == null || iso === "") return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "America/Sao_Paulo",
+  });
+}
+
 export function parseDateBRToISO(value: string): string | null {
   const v = value.trim();
   const m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);

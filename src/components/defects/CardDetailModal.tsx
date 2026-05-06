@@ -14,7 +14,7 @@ import {
   type DefectSeveridade,
   type DefectStatus,
 } from "@/lib/constants";
-import { formatDateBR, isoToDateBRInput, parseDateBRToISO } from "@/lib/date";
+import { formatDateBR, formatDateTimeBR, isoToDateBRInput, parseDateBRToISO } from "@/lib/date";
 import { CreatableMultiSelect } from "./CreatableMultiSelect";
 import { DateBRPickerInput } from "./DateBRPickerInput";
 import { CommentRichEditor, type CommentEditorHandle } from "./CommentRichEditor";
@@ -488,7 +488,7 @@ export function CardDetailModal({
               {comments.map((c) => (
                 <li key={c.id} className="rounded-lg border border-slate-200 bg-white p-2 text-sm shadow-sm">
                   <p className="text-xs text-slate-500">
-                    {c.autor || "Anônimo"} · {formatDateBR(c.created_at)}
+                    {c.autor || "Anônimo"} · {formatDateTimeBR(c.created_at)}
                   </p>
                   <CommentDisplay texto={c.texto} />
                 </li>
