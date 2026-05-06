@@ -1,4 +1,5 @@
-﻿import Link from "next/link";
+import Link from "next/link";
+import Image from "next/image";
 import { LayoutGrid, BarChart3 } from "lucide-react";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -6,7 +7,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen bg-slate-100 text-slate-900">
       <aside className="hidden w-56 shrink-0 border-r border-slate-200 bg-slate-900 text-slate-100 md:flex md:flex-col">
         <div className="border-b border-slate-800 px-4 py-5">
-          <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Urano</p>
+          <Image
+            src="/urano-logo.png"
+            alt="Logo Urano"
+            width={130}
+            height={30}
+            className="h-auto w-32 brightness-0 invert"
+            priority
+          />
           <h1 className="mt-1 text-lg font-semibold leading-tight">Defeitos de Produtos</h1>
         </div>
         <nav className="flex flex-1 flex-col gap-1 p-3">

@@ -40,7 +40,8 @@ export async function createBoardWithDefaults(titulo: string) {
     board_id: board.id,
     titulo: s,
     ordem: i,
-    status_ref: s,
+    // Mantemos null para evitar falha com constraints legadas de status_ref.
+    status_ref: null,
   }));
   const { error: e2 } = await supabase.from("kanban_columns").insert(cols);
   if (e2) throw new Error(e2.message);
@@ -54,6 +55,63 @@ export async function deleteBoard(boardId: string) {
   if (error) throw new Error(error.message);
   revalidatePath("/");
   revalidatePath("/dashboard");
+}
+
+export async function createColumn(boardId: string, titulo: string) {
+  const supabase = createServerSupabase();
+  const t = titulo.trim();
+  if (!t) throw new Error("Informe um nome para a coluna.");
+  const { data: maxRow } = await supabase
+    .from("kanban_columns")
+    .select("ordem")
+    .eq("board_id", boardId)
+    .order("ordem", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const nextOrdem = (maxRow?.ordem ?? -1) + 1;
+  const { error } = await supabase.from("kanban_columns").insert({
+    board_id: boardId,
+    titulo: t,
+    ordem: nextOrdem,
+    status_ref: null,
+  });
+  if (error) throw new Error(error.message);
+  revalidateBoard(boardId);
+}
+
+export async function renameColumn(columnId: string, boardId: string, titulo: string) {
+  const supabase = createServerSupabase();
+  const t = titulo.trim();
+  if (!t) throw new Error("Nome da coluna não pode ser vazio.");
+  const { error } = await supabase.from("kanban_columns").update({ titulo: t }).eq("id", columnId);
+  if (error) throw new Error(error.message);
+  revalidateBoard(boardId);
+}
+
+export async function deleteColumn(columnId: string, boardId: string) {
+  const supabase = createServerSupabase();
+  const { count } = await supabase
+    .from("defect_cards")
+    .select("*", { count: "exact", head: true })
+    .eq("column_id", columnId);
+  if ((count ?? 0) > 0) {
+    throw new Error("Mova os cards desta coluna antes de excluir.");
+  }
+  const { error } = await supabase.from("kanban_columns").delete().eq("id", columnId);
+  if (error) throw new Error(error.message);
+  revalidateBoard(boardId);
+}
+
+export async function reorderColumns(boardId: string, orderedColumnIds: string[]) {
+  if (!orderedColumnIds.length) return;
+  const supabase = createServerSupabase();
+  const updates = orderedColumnIds.map((id, index) =>
+    supabase.from("kanban_columns").update({ ordem: index }).eq("id", id).eq("board_id", boardId),
+  );
+  const results = await Promise.all(updates);
+  const failed = results.find((r) => r.error);
+  if (failed?.error) throw new Error(failed.error.message);
+  revalidateBoard(boardId);
 }
 
 export async function createDefectCard(input: {
@@ -77,10 +135,10 @@ export async function createDefectCard(input: {
   const supabase = createServerSupabase();
   const { data: col } = await supabase
     .from("kanban_columns")
-    .select("status_ref")
+    .select("status_ref,titulo")
     .eq("id", input.columnId)
     .single();
-  const statusFromCol = parseStatusRef(col?.status_ref ?? null);
+  const statusFromCol = parseStatusRef(col?.status_ref ?? null) ?? parseStatusRef(col?.titulo ?? null);
   const status: DefectStatus = statusFromCol ?? "Aguardando";
 
   const { data: card, error } = await supabase
@@ -124,10 +182,10 @@ export async function moveCardToColumn(
   const supabase = createServerSupabase();
   const { data: col } = await supabase
     .from("kanban_columns")
-    .select("status_ref")
+    .select("status_ref,titulo")
     .eq("id", newColumnId)
     .single();
-  const statusFromCol = parseStatusRef(col?.status_ref ?? null);
+  const statusFromCol = parseStatusRef(col?.status_ref ?? null) ?? parseStatusRef(col?.titulo ?? null);
 
   const patch: Record<string, unknown> = { column_id: newColumnId };
   if (statusFromCol) patch.status = statusFromCol;

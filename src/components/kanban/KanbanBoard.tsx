@@ -1,14 +1,21 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { DragDropContext, type DropResult } from "@hello-pangea/dnd";
+import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
 import { useRouter } from "next/navigation";
 import type { BoardPayload, DefectCardRow } from "@/lib/types/db";
 import { KanbanColumn } from "./KanbanColumn";
 import { BoardTitleEditor } from "./BoardTitleEditor";
-import { moveCardToColumn, deleteBoard } from "@/app/actions/defeitos";
+import {
+  moveCardToColumn,
+  deleteBoard,
+  createColumn,
+  renameColumn,
+  deleteColumn,
+  reorderColumns,
+} from "@/app/actions/defeitos";
 import { DEFECT_SEVERIDADE, MODELOS_PRODUTO } from "@/lib/constants";
-import { Plus, Filter, Trash2 } from "lucide-react";
+import { Plus, Filter, Trash2, Columns3 } from "lucide-react";
 import { CardDetailModal } from "@/components/defects/CardDetailModal";
 import { NewDefectModal } from "@/components/defects/NewDefectModal";
 
@@ -41,9 +48,27 @@ export function KanbanBoard({ boardId, initial }: { boardId: string; initial: Bo
 
   const onDragEnd = async (result: DropResult) => {
     setErr(null);
-    const { destination, source, draggableId } = result;
+    const { destination, source, draggableId, type } = result;
     if (!destination) return;
     if (destination.droppableId === source.droppableId && destination.index === source.index) return;
+    if (type === "COLUMN") {
+      const ordered = [...initial.columns];
+      const [moved] = ordered.splice(source.index, 1);
+      ordered.splice(destination.index, 0, moved);
+      setBusy(true);
+      try {
+        await reorderColumns(
+          boardId,
+          ordered.map((c) => c.id),
+        );
+        router.refresh();
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : "Erro ao reordenar colunas");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     if (destination.droppableId === source.droppableId) return;
     setBusy(true);
     try {
@@ -65,6 +90,38 @@ export function KanbanBoard({ boardId, initial }: { boardId: string; initial: Bo
       router.refresh();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Erro");
+    }
+  };
+
+  const handleCreateColumn = async () => {
+    setErr(null);
+    try {
+      await createColumn(boardId, "Nova coluna");
+      router.refresh();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Erro ao criar coluna");
+    }
+  };
+
+  const handleRenameColumn = async (columnId: string, nextName: string) => {
+    setErr(null);
+    try {
+      await renameColumn(columnId, boardId, nextName);
+      router.refresh();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Erro ao editar coluna");
+    }
+  };
+
+  const handleDeleteColumn = async (columnId: string) => {
+    const ok = confirm("Deseja excluir esta coluna? (só é possível se estiver vazia)");
+    if (!ok) return;
+    setErr(null);
+    try {
+      await deleteColumn(columnId, boardId);
+      router.refresh();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Erro ao excluir coluna");
     }
   };
 
@@ -91,6 +148,14 @@ export function KanbanBoard({ boardId, initial }: { boardId: string; initial: Bo
           >
             <Plus className="h-4 w-4" />
             Novo card
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleCreateColumn()}
+            className="inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-900 hover:bg-blue-100"
+          >
+            <Columns3 className="h-4 w-4" />
+            Nova coluna
           </button>
           <button
             type="button"
@@ -143,11 +208,30 @@ export function KanbanBoard({ boardId, initial }: { boardId: string; initial: Bo
       </div>
 
       <DragDropContext onDragEnd={onDragEnd}>
-        <div className="flex gap-4 overflow-x-auto pb-4">
-          {initial.columns.map((col) => (
-            <KanbanColumn key={col.id} column={col} cards={byColumn(col.id)} onOpenCard={setDetailCardId} />
-          ))}
-        </div>
+        <Droppable droppableId="board-columns" type="COLUMN" direction="horizontal">
+          {(provided) => (
+            <div ref={provided.innerRef} {...provided.droppableProps} className="flex gap-4 overflow-x-auto pb-4">
+              {initial.columns.map((col, index) => (
+                <Draggable key={col.id} draggableId={`column-${col.id}`} index={index}>
+                  {(dragProvided) => (
+                    <div ref={dragProvided.innerRef} {...dragProvided.draggableProps}>
+                      <KanbanColumn
+                        column={col}
+                        cards={byColumn(col.id)}
+                        onOpenCard={setDetailCardId}
+                        onRenameColumn={handleRenameColumn}
+                        onDeleteColumn={handleDeleteColumn}
+                        busy={busy}
+                        columnDragHandleProps={dragProvided.dragHandleProps}
+                      />
+                    </div>
+                  )}
+                </Draggable>
+              ))}
+              {provided.placeholder}
+            </div>
+          )}
+        </Droppable>
       </DragDropContext>
 
       <CardDetailModal
