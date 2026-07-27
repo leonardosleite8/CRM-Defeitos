@@ -20,6 +20,7 @@ export type DefectCardRow = {
   id: string;
   board_id: string;
   column_id: string;
+  ordem: number;
   titulo: string;
   descricao: string | null;
   solucao: string | null;

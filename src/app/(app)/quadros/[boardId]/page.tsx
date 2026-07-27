@@ -20,7 +20,22 @@ export default async function QuadroPage({ params }: { params: Promise<{ boardId
   try {
     const payload = await getBoardPayload(boardId);
     return <KanbanBoard boardId={boardId} initial={payload} />;
-  } catch {
-    notFound();
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    const missing = /not found|não encontrado|0 rows|PGRST116/i.test(message);
+    if (missing) notFound();
+
+    return (
+      <div className="mx-auto max-w-2xl rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+        <p className="font-semibold">Não foi possível carregar o quadro.</p>
+        <p className="mt-2">{message}</p>
+        <p className="mt-3 text-amber-900">
+          Se a mensagem citar a coluna <code className="rounded bg-amber-100 px-1">ordem</code>,
+          execute a migration{" "}
+          <code className="rounded bg-amber-100 px-1">010_add_card_ordem.sql</code> no SQL Editor
+          do Supabase e recarregue a página.
+        </p>
+      </div>
+    );
   }
 }

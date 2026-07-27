@@ -39,6 +39,7 @@ CREATE TABLE defect_cards (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   board_id UUID NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
   column_id UUID NOT NULL REFERENCES kanban_columns(id) ON DELETE RESTRICT,
+  ordem INTEGER NOT NULL DEFAULT 0,
   titulo TEXT NOT NULL,
   descricao TEXT,
   solucao TEXT,
@@ -66,6 +67,7 @@ CREATE TABLE defect_comments (
 
 CREATE INDEX idx_defect_cards_board ON defect_cards(board_id);
 CREATE INDEX idx_defect_cards_column ON defect_cards(column_id);
+CREATE INDEX idx_defect_cards_column_ordem ON defect_cards(column_id, ordem);
 CREATE INDEX idx_kanban_columns_board ON kanban_columns(board_id);
 CREATE INDEX idx_defect_comments_card ON defect_comments(card_id);
 

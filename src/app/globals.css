@@ -3,6 +3,8 @@
 :root {
   --background: #f1f5f9;
   --foreground: #0f172a;
+  /* Azul Urano (login + marca) — alinhado ao blue-900 do sistema */
+  --urano-blue: #1e3a8a;
 }
 
 @theme inline {

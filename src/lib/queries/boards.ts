@@ -40,10 +40,11 @@ function asStringArray(v: unknown): string[] {
   return [];
 }
 
-function normalizeCard(row: Record<string, unknown>): DefectCardRow {
+export function normalizeCard(row: Record<string, unknown>): DefectCardRow {
   const r = row as DefectCardRow;
   return {
     ...r,
+    ordem: typeof row.ordem === "number" ? row.ordem : 0,
     solucao: (row.solucao as string | null | undefined) ?? null,
     origem: ((row.origem as DefectOrigem | null | undefined) ?? "Outros") as DefectOrigem,
     setor_responsavel: ((row.setor_responsavel as DefectOrigem | null | undefined) ?? "Outros") as DefectOrigem,
@@ -80,11 +81,22 @@ export async function getBoardPayload(boardId: string): Promise<BoardPayload> {
     .order("ordem", { ascending: true });
   if (e2) throw new Error(e2.message);
 
-  const { data: cards, error: e3 } = await supabase
+  const { data: cardsRaw, error: e3 } = await supabase
     .from("defect_cards")
     .select("*")
-    .eq("board_id", boardId);
-  if (e3) throw new Error(e3.message);
+    .eq("board_id", boardId)
+    .order("ordem", { ascending: true });
+
+  // Fallback enquanto a migration 010 (coluna ordem) não foi aplicada no Supabase.
+  let cards = cardsRaw;
+  if (e3) {
+    const missingOrdem =
+      /ordem/i.test(e3.message) || /column/i.test(e3.message) || e3.code === "42703";
+    if (!missingOrdem) throw new Error(e3.message);
+    const fallback = await supabase.from("defect_cards").select("*").eq("board_id", boardId);
+    if (fallback.error) throw new Error(fallback.error.message);
+    cards = fallback.data;
+  }
 
   return {
     board,

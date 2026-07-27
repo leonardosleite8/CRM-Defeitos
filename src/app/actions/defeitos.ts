@@ -141,11 +141,21 @@ export async function createDefectCard(input: {
   const statusFromCol = parseStatusRef(col?.status_ref ?? null) ?? parseStatusRef(col?.titulo ?? null);
   const status: DefectStatus = statusFromCol ?? "Aguardando";
 
+  const { data: maxRow } = await supabase
+    .from("defect_cards")
+    .select("ordem")
+    .eq("column_id", input.columnId)
+    .order("ordem", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const nextOrdem = (maxRow?.ordem ?? -1) + 1;
+
   const { data: card, error } = await supabase
     .from("defect_cards")
     .insert({
       board_id: input.boardId,
       column_id: input.columnId,
+      ordem: nextOrdem,
       titulo: input.titulo,
       descricao: input.descricao || null,
       solucao: input.solucao || null,
@@ -173,11 +183,33 @@ export async function updateDefectCardMedia(cardId: string, boardId: string, med
   revalidateBoard(boardId);
 }
 
+export async function reorderCardsInColumn(
+  boardId: string,
+  columnId: string,
+  orderedCardIds: string[],
+) {
+  if (!orderedCardIds.length) return;
+  const supabase = createServerSupabase();
+  const updates = orderedCardIds.map((id, index) =>
+    supabase
+      .from("defect_cards")
+      .update({ ordem: index })
+      .eq("id", id)
+      .eq("board_id", boardId)
+      .eq("column_id", columnId),
+  );
+  const results = await Promise.all(updates);
+  const failed = results.find((r) => r.error);
+  if (failed?.error) throw new Error(failed.error.message);
+  revalidateBoard(boardId);
+}
+
 export async function moveCardToColumn(
   cardId: string,
   boardId: string,
   newColumnId: string,
   _previousColumnId?: string,
+  destinationIndex = 0,
 ) {
   const supabase = createServerSupabase();
   const { data: col } = await supabase
@@ -187,7 +219,10 @@ export async function moveCardToColumn(
     .single();
   const statusFromCol = parseStatusRef(col?.status_ref ?? null) ?? parseStatusRef(col?.titulo ?? null);
 
-  const patch: Record<string, unknown> = { column_id: newColumnId };
+  const patch: Record<string, unknown> = {
+    column_id: newColumnId,
+    ordem: destinationIndex,
+  };
   if (statusFromCol) patch.status = statusFromCol;
 
   const { error } = await supabase.from("defect_cards").update(patch).eq("id", cardId);

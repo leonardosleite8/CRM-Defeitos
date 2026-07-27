@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
 import { useRouter } from "next/navigation";
 import type { BoardPayload, DefectCardRow } from "@/lib/types/db";
@@ -13,17 +13,84 @@ import {
   renameColumn,
   deleteColumn,
   reorderColumns,
+  reorderCardsInColumn,
 } from "@/app/actions/defeitos";
-import { DEFECT_SEVERIDADE, MODELOS_PRODUTO } from "@/lib/constants";
-import { Plus, Filter, Trash2, Columns3 } from "lucide-react";
+import {
+  DEFECT_ORIGEM,
+  DEFECT_SEVERIDADE,
+  DEFECT_STATUS,
+  LINHAS,
+  MODELOS_PRODUTO,
+} from "@/lib/constants";
+import { Plus, Filter, Trash2, Columns3, Search } from "lucide-react";
 import { CardDetailModal } from "@/components/defects/CardDetailModal";
 import { NewDefectModal } from "@/components/defects/NewDefectModal";
 
-function filterCards(cards: DefectCardRow[], modelo: string, severidade: string): DefectCardRow[] {
+type BoardFilters = {
+  modelo: string;
+  linha: string;
+  origem: string;
+  setor: string;
+  status: string;
+  severidade: string;
+  q: string;
+};
+
+function filterCards(cards: DefectCardRow[], f: BoardFilters): DefectCardRow[] {
+  const words = f.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   return cards.filter((c) => {
-    if (modelo && !(c.modelo_produto ?? []).includes(modelo)) return false;
-    if (severidade && c.severidade !== severidade) return false;
+    if (f.modelo && !(c.modelo_produto ?? []).includes(f.modelo)) return false;
+    if (f.linha && !(c.linha ?? []).includes(f.linha)) return false;
+    if (f.origem && c.origem !== f.origem) return false;
+    if (f.setor && c.setor_responsavel !== f.setor) return false;
+    if (f.status && c.status !== f.status) return false;
+    if (f.severidade && c.severidade !== f.severidade) return false;
+    if (words.length) {
+      const hay = [
+        c.titulo,
+        c.descricao,
+        c.solucao,
+        c.responsavel,
+        c.setor_responsavel,
+        c.origem,
+        c.status,
+        c.severidade,
+        ...(c.modelo_produto ?? []),
+        ...(c.linha ?? []),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (!words.every((w) => hay.includes(w))) return false;
+    }
     return true;
+  });
+}
+
+function sortByOrdem(cards: DefectCardRow[]): DefectCardRow[] {
+  return [...cards].sort((a, b) => a.ordem - b.ordem || a.id.localeCompare(b.id));
+}
+
+/** Reaplica a ordem dos cards visíveis preservando os filtrados fora da lista. */
+function applyFilteredOrder(
+  allInColumn: DefectCardRow[],
+  nextVisibleIds: string[],
+): DefectCardRow[] {
+  const visibleSet = new Set(nextVisibleIds);
+  const queue = [...nextVisibleIds];
+  const orderedIds: string[] = [];
+  for (const card of sortByOrdem(allInColumn)) {
+    if (visibleSet.has(card.id)) {
+      const next = queue.shift();
+      if (next) orderedIds.push(next);
+    } else {
+      orderedIds.push(card.id);
+    }
+  }
+  const byId = new Map(allInColumn.map((c) => [c.id, c]));
+  return orderedIds.map((id, index) => {
+    const card = byId.get(id)!;
+    return { ...card, ordem: index };
   });
 }
 
@@ -32,17 +99,36 @@ export function KanbanBoard({ boardId, initial }: { boardId: string; initial: Bo
   const [detailCardId, setDetailCardId] = useState<string | null>(null);
   const [newCardColumnId, setNewCardColumnId] = useState<string | null>(null);
   const [filterModelo, setFilterModelo] = useState("");
+  const [filterLinha, setFilterLinha] = useState("");
+  const [filterOrigem, setFilterOrigem] = useState("");
+  const [filterSetor, setFilterSetor] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
   const [filterSev, setFilterSev] = useState("");
+  const [filterQ, setFilterQ] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [cards, setCards] = useState(initial.cards);
+
+  useEffect(() => {
+    setCards(initial.cards);
+  }, [initial.cards]);
 
   const filtered = useMemo(
-    () => filterCards(initial.cards, filterModelo, filterSev),
-    [initial.cards, filterModelo, filterSev],
+    () =>
+      filterCards(cards, {
+        modelo: filterModelo,
+        linha: filterLinha,
+        origem: filterOrigem,
+        setor: filterSetor,
+        status: filterStatus,
+        severidade: filterSev,
+        q: filterQ,
+      }),
+    [cards, filterModelo, filterLinha, filterOrigem, filterSetor, filterStatus, filterSev, filterQ],
   );
 
   const byColumn = useCallback(
-    (colId: string) => filtered.filter((c) => c.column_id === colId),
+    (colId: string) => sortByOrdem(filtered.filter((c) => c.column_id === colId)),
     [filtered],
   );
 
@@ -69,12 +155,86 @@ export function KanbanBoard({ boardId, initial }: { boardId: string; initial: Bo
       }
       return;
     }
-    if (destination.droppableId === source.droppableId) return;
+
+    const sourceColId = source.droppableId;
+    const destColId = destination.droppableId;
+
+    if (sourceColId === destColId) {
+      const visible = byColumn(sourceColId);
+      const nextVisible = [...visible];
+      const [moved] = nextVisible.splice(source.index, 1);
+      if (!moved || moved.id !== draggableId) return;
+      nextVisible.splice(destination.index, 0, moved);
+
+      const allInColumn = cards.filter((c) => c.column_id === sourceColId);
+      const reordered = applyFilteredOrder(
+        allInColumn,
+        nextVisible.map((c) => c.id),
+      );
+      const reorderedById = new Map(reordered.map((c) => [c.id, c]));
+      setCards((prev) => prev.map((c) => reorderedById.get(c.id) ?? c));
+
+      setBusy(true);
+      try {
+        await reorderCardsInColumn(
+          boardId,
+          sourceColId,
+          reordered.map((c) => c.id),
+        );
+        router.refresh();
+      } catch (e) {
+        setCards(initial.cards);
+        setErr(e instanceof Error ? e.message : "Erro ao reordenar cards");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    const sourceVisible = byColumn(sourceColId);
+    const destVisible = byColumn(destColId);
+    const moving = sourceVisible.find((c) => c.id === draggableId);
+    if (!moving) return;
+
+    const nextSourceVisible = sourceVisible.filter((c) => c.id !== draggableId);
+    const nextDestVisible = [...destVisible];
+    nextDestVisible.splice(destination.index, 0, { ...moving, column_id: destColId });
+
+    const sourceAll = cards.filter((c) => c.column_id === sourceColId && c.id !== draggableId);
+    const destAll = cards.filter((c) => c.column_id === destColId && c.id !== draggableId);
+    const nextSource = applyFilteredOrder(
+      sourceAll,
+      nextSourceVisible.map((c) => c.id),
+    );
+    const nextDest = applyFilteredOrder(
+      [...destAll, { ...moving, column_id: destColId }],
+      nextDestVisible.map((c) => c.id),
+    );
+    const patchById = new Map([...nextSource, ...nextDest].map((c) => [c.id, c]));
+
+    setCards((prev) =>
+      prev.map((c) => {
+        const patched = patchById.get(c.id);
+        return patched ?? c;
+      }),
+    );
+
     setBusy(true);
     try {
-      await moveCardToColumn(draggableId, boardId, destination.droppableId, source.droppableId);
+      await moveCardToColumn(draggableId, boardId, destColId, sourceColId, destination.index);
+      await reorderCardsInColumn(
+        boardId,
+        sourceColId,
+        nextSource.map((c) => c.id),
+      );
+      await reorderCardsInColumn(
+        boardId,
+        destColId,
+        nextDest.map((c) => c.id),
+      );
       router.refresh();
     } catch (e) {
+      setCards(initial.cards);
       setErr(e instanceof Error ? e.message : "Erro ao mover card");
     } finally {
       setBusy(false);
@@ -82,7 +242,7 @@ export function KanbanBoard({ boardId, initial }: { boardId: string; initial: Bo
   };
 
   const handleDeleteBoard = async () => {
-    if (!confirm("Excluir todo este quadro e os cards? Esta aÃ§Ã£o nÃ£o pode ser desfeita.")) return;
+    if (!confirm("Excluir todo este quadro e os cards? Esta ação não pode ser desfeita.")) return;
     setErr(null);
     try {
       await deleteBoard(boardId);
@@ -136,7 +296,8 @@ export function KanbanBoard({ boardId, initial }: { boardId: string; initial: Bo
         <div className="space-y-2">
           <BoardTitleEditor boardId={boardId} initialTitulo={initial.board.titulo} />
           <p className="text-sm text-slate-600">
-            Arraste os cards pela faixa &quot;Arrastar&quot; entre as colunas. Toque no card para abrir detalhes.
+            Arraste os cards pela faixa &quot;Arrastar&quot; para reordenar na coluna ou mover entre
+            colunas. Toque no card para abrir detalhes.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -168,13 +329,13 @@ export function KanbanBoard({ boardId, initial }: { boardId: string; initial: Bo
         </div>
       </div>
 
-      <div className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 md:flex-row md:items-end md:gap-4">
+      <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3">
         <div className="flex items-center gap-2 text-slate-700">
           <Filter className="h-4 w-4" />
-          <span className="text-sm font-medium">Filtros rÃ¡pidos</span>
+          <span className="text-sm font-medium">Filtros</span>
         </div>
         <div className="flex flex-1 flex-wrap gap-3">
-          <label className="flex min-w-[160px] flex-1 flex-col text-xs font-medium text-slate-600">
+          <label className="flex min-w-[140px] flex-1 flex-col text-xs font-medium text-slate-600">
             Modelo
             <select
               className="mt-1 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm"
@@ -190,6 +351,66 @@ export function KanbanBoard({ boardId, initial }: { boardId: string; initial: Bo
             </select>
           </label>
           <label className="flex min-w-[140px] flex-1 flex-col text-xs font-medium text-slate-600">
+            Linha
+            <select
+              className="mt-1 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm"
+              value={filterLinha}
+              onChange={(e) => setFilterLinha(e.target.value)}
+            >
+              <option value="">Todas</option>
+              {LINHAS.map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex min-w-[120px] flex-1 flex-col text-xs font-medium text-slate-600">
+            Origem
+            <select
+              className="mt-1 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm"
+              value={filterOrigem}
+              onChange={(e) => setFilterOrigem(e.target.value)}
+            >
+              <option value="">Todas</option>
+              {DEFECT_ORIGEM.map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex min-w-[140px] flex-1 flex-col text-xs font-medium text-slate-600">
+            Setor responsável
+            <select
+              className="mt-1 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm"
+              value={filterSetor}
+              onChange={(e) => setFilterSetor(e.target.value)}
+            >
+              <option value="">Todos</option>
+              {DEFECT_ORIGEM.map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex min-w-[120px] flex-1 flex-col text-xs font-medium text-slate-600">
+            Status
+            <select
+              className="mt-1 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm"
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+            >
+              <option value="">Todos</option>
+              {DEFECT_STATUS.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex min-w-[120px] flex-1 flex-col text-xs font-medium text-slate-600">
             Severidade
             <select
               className="mt-1 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm"
@@ -205,6 +426,18 @@ export function KanbanBoard({ boardId, initial }: { boardId: string; initial: Bo
             </select>
           </label>
         </div>
+        <label className="relative block text-xs font-medium text-slate-600">
+          Busca livre
+          <span className="relative mt-1 block">
+            <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              value={filterQ}
+              onChange={(e) => setFilterQ(e.target.value)}
+              placeholder="Buscar por palavras…"
+              className="w-full rounded-md border border-slate-300 bg-white py-1.5 pl-8 pr-2 text-sm"
+            />
+          </span>
+        </label>
       </div>
 
       <DragDropContext onDragEnd={onDragEnd}>
@@ -251,4 +484,3 @@ export function KanbanBoard({ boardId, initial }: { boardId: string; initial: Bo
     </div>
   );
 }
-

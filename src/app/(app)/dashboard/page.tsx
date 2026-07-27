@@ -1,4 +1,4 @@
-﻿import { getDashboardData } from "@/lib/queries/boards";
+import { getDashboardData } from "@/lib/queries/boards";
 import { DashboardCharts } from "@/components/dashboard/DashboardCharts";
 import { ExcelExportButton } from "@/components/dashboard/ExcelExportButton";
 import { ConfigAlert } from "@/components/ConfigAlert";
