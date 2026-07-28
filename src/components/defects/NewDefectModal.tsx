@@ -136,7 +136,15 @@ export function NewDefectModal({
       handleClose();
       router.refresh();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Erro ao salvar");
+      const msg = e instanceof Error ? e.message : "Erro ao salvar";
+      // Evita mostrar o digest genérico do Next em produção
+      if (/Server Components render|digest/i.test(msg)) {
+        setErr(
+          "Falha ao criar o card. Se o problema continuar, execute no Supabase a migration 010_add_card_ordem.sql e tente de novo.",
+        );
+      } else {
+        setErr(msg);
+      }
     } finally {
       setSubmitting(false);
     }

@@ -68,7 +68,12 @@ function filterCards(cards: DefectCardRow[], f: BoardFilters): DefectCardRow[] {
 }
 
 function sortByOrdem(cards: DefectCardRow[]): DefectCardRow[] {
-  return [...cards].sort((a, b) => a.ordem - b.ordem || a.id.localeCompare(b.id));
+  return [...cards].sort((a, b) => {
+    const ao = Number.isFinite(Number(a.ordem)) ? Number(a.ordem) : 0;
+    const bo = Number.isFinite(Number(b.ordem)) ? Number(b.ordem) : 0;
+    if (ao !== bo) return ao - bo;
+    return (b.data_criacao || "").localeCompare(a.data_criacao || "") || a.id.localeCompare(b.id);
+  });
 }
 
 /** Reaplica a ordem dos cards visíveis preservando os filtrados fora da lista. */
@@ -109,8 +114,27 @@ export function KanbanBoard({ boardId, initial }: { boardId: string; initial: Bo
   const [err, setErr] = useState<string | null>(null);
   const [cards, setCards] = useState(initial.cards);
 
+  // Só substitui a lista local quando cards são criados/excluídos.
+  // Se for o mesmo conjunto, preserva column_id/ordem definidos pelo usuário (evita “pulo” de volta).
   useEffect(() => {
-    setCards(initial.cards);
+    setCards((prev) => {
+      const sameIds =
+        prev.length === initial.cards.length &&
+        prev.every((c) => initial.cards.some((s) => s.id === c.id));
+
+      if (!sameIds) return initial.cards;
+
+      const serverById = new Map(initial.cards.map((c) => [c.id, c]));
+      return prev.map((local) => {
+        const server = serverById.get(local.id);
+        if (!server) return local;
+        return {
+          ...server,
+          column_id: local.column_id,
+          ordem: local.ordem,
+        };
+      });
+    });
   }, [initial.cards]);
 
   const filtered = useMemo(
@@ -172,22 +196,24 @@ export function KanbanBoard({ boardId, initial }: { boardId: string; initial: Bo
         nextVisible.map((c) => c.id),
       );
       const reorderedById = new Map(reordered.map((c) => [c.id, c]));
+      // UI instantânea — não trava com busy/Rendering
       setCards((prev) => prev.map((c) => reorderedById.get(c.id) ?? c));
 
-      setBusy(true);
-      try {
-        await reorderCardsInColumn(
-          boardId,
-          sourceColId,
-          reordered.map((c) => c.id),
-        );
-        router.refresh();
-      } catch (e) {
+      void reorderCardsInColumn(
+        boardId,
+        sourceColId,
+        reordered.map((c) => c.id),
+      ).catch((e) => {
         setCards(initial.cards);
-        setErr(e instanceof Error ? e.message : "Erro ao reordenar cards");
-      } finally {
-        setBusy(false);
-      }
+        const msg = e instanceof Error ? e.message : "Erro ao reordenar cards";
+        if (/ordem/i.test(msg) || /column/i.test(msg) || /010_add_card_ordem/i.test(msg)) {
+          setErr(
+            "Não foi possível salvar a ordem. Execute no Supabase a migration 010_add_card_ordem.sql e tente de novo.",
+          );
+        } else {
+          setErr(msg);
+        }
+      });
       return;
     }
 
@@ -219,26 +245,33 @@ export function KanbanBoard({ boardId, initial }: { boardId: string; initial: Bo
       }),
     );
 
-    setBusy(true);
-    try {
-      await moveCardToColumn(draggableId, boardId, destColId, sourceColId, destination.index);
-      await reorderCardsInColumn(
-        boardId,
-        sourceColId,
-        nextSource.map((c) => c.id),
-      );
-      await reorderCardsInColumn(
-        boardId,
-        destColId,
-        nextDest.map((c) => c.id),
-      );
-      router.refresh();
-    } catch (e) {
-      setCards(initial.cards);
-      setErr(e instanceof Error ? e.message : "Erro ao mover card");
-    } finally {
-      setBusy(false);
-    }
+    void (async () => {
+      try {
+        await moveCardToColumn(draggableId, boardId, destColId, sourceColId, destination.index);
+        await Promise.all([
+          reorderCardsInColumn(
+            boardId,
+            sourceColId,
+            nextSource.map((c) => c.id),
+          ),
+          reorderCardsInColumn(
+            boardId,
+            destColId,
+            nextDest.map((c) => c.id),
+          ),
+        ]);
+      } catch (e) {
+        setCards(initial.cards);
+        const msg = e instanceof Error ? e.message : "Erro ao mover card";
+        if (/ordem/i.test(msg) || /column/i.test(msg) || /010_add_card_ordem/i.test(msg)) {
+          setErr(
+            "Não foi possível salvar a ordem. Execute no Supabase a migration 010_add_card_ordem.sql e tente de novo.",
+          );
+        } else {
+          setErr(msg);
+        }
+      }
+    })();
   };
 
   const handleDeleteBoard = async () => {

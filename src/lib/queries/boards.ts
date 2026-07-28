@@ -42,9 +42,10 @@ function asStringArray(v: unknown): string[] {
 
 export function normalizeCard(row: Record<string, unknown>): DefectCardRow {
   const r = row as DefectCardRow;
+  const ordemNum = Number(row.ordem);
   return {
     ...r,
-    ordem: typeof row.ordem === "number" ? row.ordem : 0,
+    ordem: Number.isFinite(ordemNum) ? ordemNum : 0,
     solucao: (row.solucao as string | null | undefined) ?? null,
     origem: ((row.origem as DefectOrigem | null | undefined) ?? "Outros") as DefectOrigem,
     setor_responsavel: ((row.setor_responsavel as DefectOrigem | null | undefined) ?? "Outros") as DefectOrigem,
@@ -85,7 +86,8 @@ export async function getBoardPayload(boardId: string): Promise<BoardPayload> {
     .from("defect_cards")
     .select("*")
     .eq("board_id", boardId)
-    .order("ordem", { ascending: true });
+    .order("ordem", { ascending: true })
+    .order("data_criacao", { ascending: false });
 
   // Fallback enquanto a migration 010 (coluna ordem) não foi aplicada no Supabase.
   let cards = cardsRaw;

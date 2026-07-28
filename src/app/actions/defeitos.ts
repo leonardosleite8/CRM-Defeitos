@@ -141,36 +141,53 @@ export async function createDefectCard(input: {
   const statusFromCol = parseStatusRef(col?.status_ref ?? null) ?? parseStatusRef(col?.titulo ?? null);
   const status: DefectStatus = statusFromCol ?? "Aguardando";
 
-  const { data: maxRow } = await supabase
+  const baseRow: Record<string, unknown> = {
+    board_id: input.boardId,
+    column_id: input.columnId,
+    titulo: input.titulo,
+    descricao: input.descricao || null,
+    solucao: input.solucao || null,
+    origem: input.origem,
+    setor_responsavel: input.setorResponsavel,
+    status,
+    severidade: input.severidade,
+    modelo_produto: input.modeloProduto,
+    linha: input.linha,
+    responsavel: input.responsavel || null,
+    media_urls: input.mediaUrls,
+    previsao_conclusao: input.previsaoConclusao || null,
+  };
+
+  // Tenta com ordem (migration 010). Novo card sempre no TOPO (menor ordem).
+  const { data: minRow, error: minErr } = await supabase
     .from("defect_cards")
     .select("ordem")
     .eq("column_id", input.columnId)
-    .order("ordem", { ascending: false })
+    .order("ordem", { ascending: true })
     .limit(1)
     .maybeSingle();
-  const nextOrdem = (maxRow?.ordem ?? -1) + 1;
 
-  const { data: card, error } = await supabase
-    .from("defect_cards")
-    .insert({
-      board_id: input.boardId,
-      column_id: input.columnId,
-      ordem: nextOrdem,
-      titulo: input.titulo,
-      descricao: input.descricao || null,
-      solucao: input.solucao || null,
-      origem: input.origem,
-      setor_responsavel: input.setorResponsavel,
-      status,
-      severidade: input.severidade,
-      modelo_produto: input.modeloProduto,
-      linha: input.linha,
-      responsavel: input.responsavel || null,
-      media_urls: input.mediaUrls,
-      previsao_conclusao: input.previsaoConclusao || null,
-    })
-    .select("id")
-    .single();
+  const missingOrdem =
+    !!minErr &&
+    (/ordem/i.test(minErr.message) || /column/i.test(minErr.message) || minErr.code === "42703");
+
+  let insertPayload = { ...baseRow };
+  if (!missingOrdem) {
+    const topOrdem = typeof minRow?.ordem === "number" ? minRow.ordem - 1 : 0;
+    insertPayload = { ...baseRow, ordem: topOrdem };
+  }
+
+  let { data: card, error } = await supabase.from("defect_cards").insert(insertPayload).select("id").single();
+
+  if (
+    error &&
+    (/ordem/i.test(error.message) || /column/i.test(error.message) || error.code === "42703")
+  ) {
+    const retry = await supabase.from("defect_cards").insert(baseRow).select("id").single();
+    card = retry.data;
+    error = retry.error;
+  }
+
   if (error || !card) throw new Error(error?.message ?? "Falha ao criar card");
   revalidateBoard(input.boardId);
   return card.id as string;
@@ -190,18 +207,82 @@ export async function reorderCardsInColumn(
 ) {
   if (!orderedCardIds.length) return;
   const supabase = createServerSupabase();
-  const updates = orderedCardIds.map((id, index) =>
-    supabase
-      .from("defect_cards")
-      .update({ ordem: index })
-      .eq("id", id)
-      .eq("board_id", boardId)
-      .eq("column_id", columnId),
+
+  // Caminho rápido: 1 round-trip via função SQL.
+  const { error: rpcError } = await supabase.rpc("reorder_defect_cards", {
+    p_board_id: boardId,
+    p_ordered_ids: orderedCardIds,
+  });
+
+  if (!rpcError) {
+    // Não revalida a página inteira — a UI já está otimista e instantânea.
+    return;
+  }
+
+  const rpcMissing =
+    /reorder_defect_cards/i.test(rpcError.message) ||
+    /Could not find the function/i.test(rpcError.message) ||
+    rpcError.code === "PGRST202";
+
+  if (!rpcMissing) {
+    if (/ordem/i.test(rpcError.message) || /column/i.test(rpcError.message) || rpcError.code === "42703") {
+      throw new Error(
+        "Coluna ordem ausente. Execute a migration 010_add_card_ordem.sql no Supabase.",
+      );
+    }
+    throw new Error(rpcError.message);
+  }
+
+  // Fallback: updates em paralelo (sem travar a UI com dezenas de awaits sequenciais).
+  const results = await Promise.all(
+    orderedCardIds.map((id, index) =>
+      supabase
+        .from("defect_cards")
+        .update({ ordem: index })
+        .eq("id", id)
+        .eq("board_id", boardId)
+        .select("id,ordem")
+        .maybeSingle(),
+    ),
   );
-  const results = await Promise.all(updates);
-  const failed = results.find((r) => r.error);
-  if (failed?.error) throw new Error(failed.error.message);
-  revalidateBoard(boardId);
+
+  const failed = results.find((r) => r.error || !r.data);
+  if (failed?.error) {
+    if (
+      /ordem/i.test(failed.error.message) ||
+      /column/i.test(failed.error.message) ||
+      failed.error.code === "42703"
+    ) {
+      throw new Error(
+        "Coluna ordem ausente. Execute a migration 010_add_card_ordem.sql no Supabase.",
+      );
+    }
+    throw new Error(failed.error.message);
+  }
+  if (failed && !failed.data) {
+    throw new Error("Não foi possível confirmar a nova ordem dos cards.");
+  }
+
+  // Empurra filtrados para o final (best-effort, sem bloquear).
+  void (async () => {
+    const { data: rest } = await supabase
+      .from("defect_cards")
+      .select("id")
+      .eq("board_id", boardId)
+      .eq("column_id", columnId)
+      .order("ordem", { ascending: true });
+    if (!rest?.length) return;
+    const listed = new Set(orderedCardIds);
+    let next = orderedCardIds.length;
+    await Promise.all(
+      rest
+        .filter((row) => !listed.has(row.id))
+        .map((row) => {
+          const ordem = next++;
+          return supabase.from("defect_cards").update({ ordem }).eq("id", row.id).eq("board_id", boardId);
+        }),
+    );
+  })();
 }
 
 export async function moveCardToColumn(
@@ -221,13 +302,25 @@ export async function moveCardToColumn(
 
   const patch: Record<string, unknown> = {
     column_id: newColumnId,
-    ordem: destinationIndex,
   };
+  if (typeof destinationIndex === "number") {
+    patch.ordem = destinationIndex;
+  }
   if (statusFromCol) patch.status = statusFromCol;
 
-  const { error } = await supabase.from("defect_cards").update(patch).eq("id", cardId);
+  let { error } = await supabase.from("defect_cards").update(patch).eq("id", cardId);
+  if (
+    error &&
+    (/ordem/i.test(error.message) || /column/i.test(error.message) || error.code === "42703")
+  ) {
+    const { column_id, status } = patch as { column_id: string; status?: string };
+    const fallback: Record<string, unknown> = { column_id };
+    if (status) fallback.status = status;
+    const retry = await supabase.from("defect_cards").update(fallback).eq("id", cardId);
+    error = retry.error;
+  }
   if (error) throw new Error(error.message);
-  revalidateBoard(boardId);
+  // Sem revalidatePath: o board já atualiza otimista no cliente (evita "Rendering" longo).
 }
 
 export async function updateDefectCardFields(
