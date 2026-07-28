@@ -158,7 +158,7 @@ export async function createDefectCard(input: {
     previsao_conclusao: input.previsaoConclusao || null,
   };
 
-  // Tenta com ordem (migration 010). Novo card sempre no TOPO (menor ordem).
+  // Novo card sempre no TOPO: ordem = min(ordem) - 1 (menor valor sobe na coluna).
   const { data: minRow, error: minErr } = await supabase
     .from("defect_cards")
     .select("ordem")
@@ -173,7 +173,9 @@ export async function createDefectCard(input: {
 
   let insertPayload = { ...baseRow };
   if (!missingOrdem) {
-    const topOrdem = typeof minRow?.ordem === "number" ? minRow.ordem - 1 : 0;
+    // Number() cobre int/string vindos do PostgREST; coluna vazia → 0 no topo.
+    const minOrdem = Number(minRow?.ordem);
+    const topOrdem = Number.isFinite(minOrdem) ? minOrdem - 1 : 0;
     insertPayload = { ...baseRow, ordem: topOrdem };
   }
 
