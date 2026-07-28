@@ -103,6 +103,41 @@ function fixSplitPlaceholders(xml: string): string {
   });
 }
 
+/** Remove só o que causa página em branco desnecessária, sem mexer no espaçamento do meio. */
+function stripUnnecessaryBlankLastPage(xml: string): string {
+  // Quebras de página explícitas nunca são desejadas neste relatório
+  let next = xml
+    .replace(/<w:br\b[^>]*w:type="page"[^/]*\/>/g, "")
+    .replace(/<w:lastRenderedPageBreak\b[^/]*\/>/g, "");
+
+  const bodyMatch = next.match(/(<w:body\b[^>]*>)([\s\S]*)(<\/w:body>)/);
+  if (!bodyMatch) return next;
+
+  const [, bodyOpen, bodyInner, bodyClose] = bodyMatch;
+  const sectMatch = bodyInner.match(/(<w:sectPr\b[\s\S]*?<\/w:sectPr>)\s*$/);
+  const sectXml = sectMatch?.[1] ?? "";
+  const main = sectMatch ? bodyInner.slice(0, sectMatch.index) : bodyInner;
+  const paragraphs = main.match(/<w:p\b[\s\S]*?<\/w:p>/g) ?? [];
+
+  const plainOf = (p: string) =>
+    p
+      .replace(/<[^>]+>/g, "")
+      .replace(/&nbsp;/g, " ")
+      .trim();
+
+  // Mantém todos os parágrafos (inclusive vazios do meio = formatação do usuário).
+  // Só corta vazios DEPOIS do último parágrafo com texto.
+  let lastContent = -1;
+  for (let i = 0; i < paragraphs.length; i++) {
+    if (plainOf(paragraphs[i])) lastContent = i;
+  }
+  if (lastContent < 0) return next;
+
+  const kept = paragraphs.slice(0, lastContent + 1);
+  const newBody = `${bodyOpen}${kept.join("")}${sectXml}${bodyClose}`;
+  return next.replace(bodyMatch[0], newBody);
+}
+
 function loadTemplateZip(): PizZip {
   const templatePath = path.join(process.cwd(), "templates", "plano-de-acao.docx");
   const zip = new PizZip(fs.readFileSync(templatePath));
@@ -122,7 +157,14 @@ export function renderPlanoDocx(item: PlanoExportCard, linkSistema: string): Buf
     delimiters: { start: "{{", end: "}}" },
   });
   doc.render(buildData(item, linkSistema));
-  return doc.getZip().generate({
+
+  const outZip = doc.getZip();
+  const rendered = outZip.file("word/document.xml");
+  if (rendered) {
+    outZip.file("word/document.xml", stripUnnecessaryBlankLastPage(rendered.asText()));
+  }
+
+  return outZip.generate({
     type: "nodebuffer",
     compression: "DEFLATE",
   }) as Buffer;
@@ -135,15 +177,23 @@ async function convertDocxBufferToDoc(docxBuffer: Buffer): Promise<Buffer> {
   const outPath = path.join(tmp, "out.doc");
   fs.writeFileSync(inPath, docxBuffer);
 
+  const inEsc = inPath.replace(/\\/g, "\\\\");
+  const outEsc = outPath.replace(/\\/g, "\\\\");
+
   const ps = `
 $ErrorActionPreference = 'Stop'
 $word = New-Object -ComObject Word.Application
 $word.Visible = $false
 $word.DisplayAlerts = 0
 try {
-  $doc = $word.Documents.Open('${inPath.replace(/\\/g, "\\\\")}')
-  # 0 = wdFormatDocument (.doc)
-  $null = $doc.SaveAs([ref] '${outPath.replace(/\\/g, "\\\\")}', [ref] 0)
+  $doc = $word.Documents.Open('${inEsc}')
+  # Remove apenas paragrafos vazios no FINAL (nao mexe no espacamento do meio)
+  while ($doc.Paragraphs.Count -gt 1) {
+    $p = $doc.Paragraphs.Item($doc.Paragraphs.Count)
+    $t = ($p.Range.Text -replace \"\`r|\`n|\`t|\\u00a0|\\u0007\", '').Trim()
+    if ($t -eq '') { $p.Range.Delete() | Out-Null } else { break }
+  }
+  $null = $doc.SaveAs([ref] '${outEsc}', [ref] 0)
   $doc.Close()
 } finally {
   $word.Quit()
