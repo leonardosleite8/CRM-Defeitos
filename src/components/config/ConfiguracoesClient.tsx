@@ -7,6 +7,8 @@ import {
   changeNameAction,
   createUserAction,
   toggleUserActiveAction,
+  updateUserRoleAction,
+  updateUserProfileAction,
 } from "@/app/actions/auth";
 
 type UserRow = {
@@ -28,6 +30,7 @@ export function ConfiguracoesClient({
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
@@ -117,7 +120,13 @@ export function ConfiguracoesClient({
 
       {session.role === "admin" ? (
         <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-4">
-          <h2 className="text-sm font-semibold text-slate-900">Usuários</h2>
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900">Usuários</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              Administradores podem gerenciar usuários comuns e promover novos admins. Não é possível
+              alterar permissões nem desativar outros administradores.
+            </p>
+          </div>
           <form
             className="flex flex-wrap items-end gap-3 border-b border-slate-100 pb-4"
             action={(fd) => {
@@ -183,32 +192,156 @@ export function ConfiguracoesClient({
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => (
-                <tr key={u.id} className="border-t border-slate-100">
-                  <td className="py-2">{u.name}</td>
-                  <td className="py-2">{u.email}</td>
-                  <td className="py-2">{u.role}</td>
-                  <td className="py-2">{u.active ? "Ativo" : "Inativo"}</td>
-                  <td className="py-2 text-right">
-                    <button
-                      type="button"
-                      className="text-xs font-medium text-blue-900 hover:underline"
-                      onClick={() => {
-                        startTransition(async () => {
-                          try {
-                            await toggleUserActiveAction(u.id, !u.active);
-                            window.location.reload();
-                          } catch (e) {
-                            setErr(e instanceof Error ? e.message : "Erro");
-                          }
-                        });
-                      }}
-                    >
-                      {u.active ? "Desativar" : "Ativar"}
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {users.map((u) => {
+                const isAdminRow = u.role === "admin";
+                const isSelf = u.id === session.id;
+                const editing = editingId === u.id;
+
+                return (
+                  <tr key={u.id} className="border-t border-slate-100 align-top">
+                    <td className="py-2 pr-2">
+                      {editing ? (
+                        <input
+                          form={`edit-user-${u.id}`}
+                          name="name"
+                          defaultValue={u.name}
+                          required
+                          className="w-full min-w-[8rem] rounded-md border border-slate-300 px-2 py-1 text-sm"
+                        />
+                      ) : (
+                        u.name
+                      )}
+                    </td>
+                    <td className="py-2 pr-2">
+                      {editing ? (
+                        <input
+                          form={`edit-user-${u.id}`}
+                          name="email"
+                          type="email"
+                          defaultValue={u.email}
+                          required
+                          className="w-full min-w-[10rem] rounded-md border border-slate-300 px-2 py-1 text-sm"
+                        />
+                      ) : (
+                        u.email
+                      )}
+                    </td>
+                    <td className="py-2 pr-2">
+                      {isAdminRow ? (
+                        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-700">
+                          Admin
+                          {isSelf ? " (você)" : ""}
+                        </span>
+                      ) : (
+                        <select
+                          className="rounded-md border border-slate-300 px-2 py-1 text-sm"
+                          defaultValue={u.role}
+                          disabled={pending}
+                          onChange={(e) => {
+                            const next = e.target.value === "admin" ? "admin" : "user";
+                            if (next === u.role) return;
+                            startTransition(async () => {
+                              setErr(null);
+                              setMsg(null);
+                              try {
+                                await updateUserRoleAction(u.id, next);
+                                setMsg(
+                                  next === "admin"
+                                    ? `${u.name} agora é administrador.`
+                                    : `Perfil de ${u.name} atualizado.`,
+                                );
+                                window.location.reload();
+                              } catch (ex) {
+                                setErr(ex instanceof Error ? ex.message : "Erro");
+                                e.target.value = u.role;
+                              }
+                            });
+                          }}
+                        >
+                          <option value="user">Usuário</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                      )}
+                    </td>
+                    <td className="py-2">{u.active ? "Ativo" : "Inativo"}</td>
+                    <td className="py-2 text-right">
+                      <div className="flex flex-wrap justify-end gap-2">
+                        {!isAdminRow ? (
+                          <>
+                            {editing ? (
+                              <>
+                                <input type="hidden" form={`edit-user-${u.id}`} name="userId" value={u.id} />
+                                <button
+                                  type="submit"
+                                  form={`edit-user-${u.id}`}
+                                  disabled={pending}
+                                  className="text-xs font-medium text-emerald-700 hover:underline disabled:opacity-50"
+                                >
+                                  Salvar
+                                </button>
+                                <button
+                                  type="button"
+                                  className="text-xs font-medium text-slate-500 hover:underline"
+                                  onClick={() => setEditingId(null)}
+                                >
+                                  Cancelar
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                className="text-xs font-medium text-blue-900 hover:underline"
+                                onClick={() => setEditingId(u.id)}
+                              >
+                                Editar
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              className="text-xs font-medium text-blue-900 hover:underline"
+                              disabled={pending}
+                              onClick={() => {
+                                startTransition(async () => {
+                                  setErr(null);
+                                  try {
+                                    await toggleUserActiveAction(u.id, !u.active);
+                                    window.location.reload();
+                                  } catch (e) {
+                                    setErr(e instanceof Error ? e.message : "Erro");
+                                  }
+                                });
+                              }}
+                            >
+                              {u.active ? "Desativar" : "Ativar"}
+                            </button>
+                          </>
+                        ) : (
+                          <span className="text-xs text-slate-400">Protegido</span>
+                        )}
+                      </div>
+                      {!isAdminRow ? (
+                        <form
+                          id={`edit-user-${u.id}`}
+                          className="hidden"
+                          action={(fd) => {
+                            setErr(null);
+                            setMsg(null);
+                            startTransition(async () => {
+                              const res = await updateUserProfileAction(fd);
+                              if (res?.error) setErr(res.error);
+                              else {
+                                setMsg("Dados do usuário atualizados.");
+                                setEditingId(null);
+                                window.location.reload();
+                              }
+                            });
+                          }}
+                        />
+                      ) : null}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </section>

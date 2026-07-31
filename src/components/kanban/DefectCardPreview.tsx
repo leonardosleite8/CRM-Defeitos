@@ -72,7 +72,9 @@ export function DefectCardPreview({
       <p className="mt-2 text-[11px] text-slate-500">
         {modelos} · {linhas}
       </p>
-      {card.origem ? <p className="mt-1 text-[11px] text-slate-600">Origem: {card.origem}</p> : null}
+      {card.setor_responsavel ? (
+        <p className="mt-1 text-[11px] text-slate-600">Setor responsável: {card.setor_responsavel}</p>
+      ) : null}
       {card.responsavel ? (
         <p className="mt-1 text-[11px] font-medium text-slate-700">Resp.: {card.responsavel}</p>
       ) : null}

@@ -108,9 +108,31 @@ export async function createUserAction(formData: FormData) {
     active: true,
   });
   if (error) return { error: error.message };
-  await writeAuditLog({ user: session, action: "user_create", detail: email });
+  await writeAuditLog({
+    user: session,
+    action: "user_create",
+    detail: `${email} (perfil: ${role})`,
+  });
   revalidatePath("/configuracoes");
   return { ok: true };
+}
+
+async function getTargetUser(userId: string) {
+  const supabase = createServerSupabase();
+  const { data, error } = await supabase
+    .from("app_users")
+    .select("id,name,email,role,active")
+    .eq("id", userId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Usuário não encontrado.");
+  return data as {
+    id: string;
+    name: string;
+    email: string;
+    role: "admin" | "user";
+    active: boolean;
+  };
 }
 
 export async function toggleUserActiveAction(userId: string, active: boolean) {
@@ -121,15 +143,89 @@ export async function toggleUserActiveAction(userId: string, active: boolean) {
   if (session.id === userId && !active) {
     throw new Error("Você não pode desativar a si mesmo.");
   }
+
+  const target = await getTargetUser(userId);
+  if (target.role === "admin") {
+    throw new Error("Administradores não podem desativar outros administradores.");
+  }
+
   const supabase = createServerSupabase();
   const { error } = await supabase.from("app_users").update({ active }).eq("id", userId);
   if (error) throw new Error(error.message);
   await writeAuditLog({
     user: session,
     action: active ? "user_activate" : "user_deactivate",
-    detail: userId,
+    detail: `${target.email} → ${active ? "ativo" : "inativo"}`,
   });
   revalidatePath("/configuracoes");
+}
+
+/** Altera o perfil (role) de um usuário. Não permite alterar permissões de administradores. */
+export async function updateUserRoleAction(userId: string, role: "admin" | "user") {
+  const session = await getSession();
+  if (!session || session.role !== "admin") {
+    throw new Error("Sem permissão.");
+  }
+  if (role !== "admin" && role !== "user") {
+    throw new Error("Perfil inválido.");
+  }
+
+  const target = await getTargetUser(userId);
+  if (target.role === "admin") {
+    throw new Error("Administradores não podem alterar permissões de outros administradores.");
+  }
+  if (target.role === role) return;
+
+  const supabase = createServerSupabase();
+  const { error } = await supabase.from("app_users").update({ role }).eq("id", userId);
+  if (error) throw new Error(error.message);
+
+  await writeAuditLog({
+    user: session,
+    action: "user_role_change",
+    detail: `${target.email}: "${target.role}" → "${role}"`,
+  });
+  revalidatePath("/configuracoes");
+}
+
+/** Atualiza nome (e opcionalmente e-mail) de usuário comum. Não altera administradores. */
+export async function updateUserProfileAction(formData: FormData) {
+  const session = await getSession();
+  if (!session || session.role !== "admin") {
+    return { error: "Sem permissão." };
+  }
+  const userId = String(formData.get("userId") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim();
+  const email = String(formData.get("email") ?? "")
+    .trim()
+    .toLowerCase();
+  if (!userId || !name || !email) {
+    return { error: "Preencha nome e e-mail." };
+  }
+
+  try {
+    const target = await getTargetUser(userId);
+    if (target.role === "admin") {
+      return { error: "Administradores não podem alterar o perfil de outros administradores." };
+    }
+
+    const supabase = createServerSupabase();
+    const { error } = await supabase
+      .from("app_users")
+      .update({ name, email })
+      .eq("id", userId);
+    if (error) return { error: error.message };
+
+    await writeAuditLog({
+      user: session,
+      action: "user_profile_update",
+      detail: `${target.email} → nome/e-mail atualizados (${email})`,
+    });
+    revalidatePath("/configuracoes");
+    return { ok: true };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Erro ao atualizar." };
+  }
 }
 
 export async function changePasswordAction(formData: FormData) {

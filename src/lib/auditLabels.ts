@@ -6,6 +6,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   user_create: "Usuário criado",
   user_activate: "Usuário ativado",
   user_deactivate: "Usuário desativado",
+  user_role_change: "Perfil de usuário alterado",
+  user_profile_update: "Dados de usuário alterados",
   password_change: "Senha alterada",
   name_change: "Nome alterado",
   export_plano_acao: "Exportou plano de ação",
