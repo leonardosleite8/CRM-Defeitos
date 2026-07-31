@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { logoutAction } from "@/app/actions/auth";
 import type { SessionUser } from "@/lib/auth/session";
+import { AuthProvider } from "@/components/auth/AuthContext";
 
 const nav = [
   { href: "/", label: "Quadros", icon: LayoutGrid },
@@ -30,6 +31,7 @@ export function AppShell({
   const pathname = usePathname();
 
   return (
+    <AuthProvider user={user}>
     <div className="flex min-h-screen bg-slate-100 text-slate-900">
       <aside className="hidden w-56 shrink-0 border-r border-slate-200 bg-slate-900 text-slate-100 md:flex md:flex-col">
         <div className="border-b border-slate-800 px-4 py-5">
@@ -131,5 +133,6 @@ export function AppShell({
         <main className="flex-1 p-4 md:p-6">{children}</main>
       </div>
     </div>
+    </AuthProvider>
   );
 }

@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import type { DefectCardRow } from "@/lib/types/db";
+import { formatCardCodigo } from "@/lib/cardCodigo";
 import { Paperclip } from "lucide-react";
 
 const sevBadge: Record<string, string> = {
@@ -22,6 +23,7 @@ export function DefectCardPreview({
   const hasMedia = (card.media_urls?.length ?? 0) > 0;
   const modelos = (card.modelo_produto ?? []).join(", ") || "—";
   const linhas = (card.linha ?? []).join(", ") || "—";
+  const codigoLabel = formatCardCodigo(card.codigo);
 
   const cardTone = concluded
     ? "border-emerald-500 bg-emerald-50 ring-1 ring-emerald-300"
@@ -49,6 +51,13 @@ export function DefectCardPreview({
         <span className="absolute right-2 top-2 text-amber-400" title="Anexos">
           <Paperclip className="h-4 w-4" strokeWidth={2.5} />
         </span>
+      ) : null}
+      {codigoLabel ? (
+        <div className="mb-2">
+          <span className="inline-flex rounded-md border border-slate-300 bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-bold tracking-wide text-slate-800">
+            {codigoLabel}
+          </span>
+        </div>
       ) : null}
       <div className="flex flex-wrap items-center gap-1">
         <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${sevBadge[card.severidade]}`}>

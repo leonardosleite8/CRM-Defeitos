@@ -37,7 +37,7 @@ export default async function DashboardPage({
           <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
           <p className="text-sm text-slate-600">Indicadores e exportação de relatórios.</p>
         </div>
-        <ExcelExportButton cards={data.cards} />
+        <ExcelExportButton cards={data.cards} etapaByColumnId={data.etapaByColumnId} />
       </div>
 
       <form className="flex flex-wrap items-end gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">

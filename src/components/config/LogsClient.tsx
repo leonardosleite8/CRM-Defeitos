@@ -1,6 +1,8 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { formatDateTimeBR } from "@/lib/date";
+import { AUDIT_ACTION_LABELS, auditActionLabel } from "@/lib/auditLabels";
 
 type LogRow = {
   id: string;
@@ -11,11 +13,59 @@ type LogRow = {
 };
 
 export function LogsClient({ logs }: { logs: LogRow[] }) {
+  const [actionFilter, setActionFilter] = useState("");
+  const [query, setQuery] = useState("");
+
+  const actionOptions = useMemo(() => {
+    const set = new Set(logs.map((l) => l.action));
+    return Array.from(set).sort((a, b) => auditActionLabel(a).localeCompare(auditActionLabel(b), "pt-BR"));
+  }, [logs]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return logs.filter((l) => {
+      if (actionFilter && l.action !== actionFilter) return false;
+      if (!q) return true;
+      const hay = `${l.user_email ?? ""} ${auditActionLabel(l.action)} ${l.action} ${l.detail ?? ""}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [logs, actionFilter, query]);
+
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Logs</h1>
         <p className="text-sm text-slate-600">Auditoria de ações do sistema (somente admin).</p>
+      </div>
+
+      <div className="flex flex-wrap gap-3 rounded-xl border border-slate-200 bg-white p-3">
+        <label className="text-xs font-medium text-slate-600">
+          Ação
+          <select
+            className="mt-1 block min-w-[12rem] rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+            value={actionFilter}
+            onChange={(e) => setActionFilter(e.target.value)}
+          >
+            <option value="">Todas</option>
+            {actionOptions.map((a) => (
+              <option key={a} value={a}>
+                {AUDIT_ACTION_LABELS[a] ?? a}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="min-w-[16rem] flex-1 text-xs font-medium text-slate-600">
+          Buscar
+          <input
+            className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Usuário, detalhe, código…"
+          />
+        </label>
+        <p className="self-end text-xs text-slate-500">
+          {filtered.length} de {logs.length} registro(s)
+        </p>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -30,18 +80,18 @@ export function LogsClient({ logs }: { logs: LogRow[] }) {
               </tr>
             </thead>
             <tbody>
-              {logs.map((l) => (
+              {filtered.map((l) => (
                 <tr key={l.id} className="border-t border-slate-100">
                   <td className="whitespace-nowrap px-3 py-2">{formatDateTimeBR(l.created_at)}</td>
                   <td className="px-3 py-2">{l.user_email || "—"}</td>
-                  <td className="px-3 py-2">{l.action}</td>
+                  <td className="px-3 py-2 font-medium text-slate-800">{auditActionLabel(l.action)}</td>
                   <td className="px-3 py-2 text-slate-600">{l.detail || "—"}</td>
                 </tr>
               ))}
-              {logs.length === 0 ? (
+              {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="px-3 py-8 text-center text-slate-500">
-                    Nenhum log ainda.
+                    Nenhum log encontrado.
                   </td>
                 </tr>
               ) : null}

@@ -5,8 +5,14 @@ import { buildExportRows } from "@/lib/buildExportRows";
 import { escapeCsvCell } from "@/lib/exportFlatten";
 import { Download, FileSpreadsheet } from "lucide-react";
 
-export function ExcelExportButton({ cards }: { cards: DefectCardRow[] }) {
-  const rows = buildExportRows(cards);
+export function ExcelExportButton({
+  cards,
+  etapaByColumnId = {},
+}: {
+  cards: DefectCardRow[];
+  etapaByColumnId?: Record<string, string>;
+}) {
+  const rows = buildExportRows(cards, etapaByColumnId);
 
   const exportXlsx = async () => {
     const XLSX = await import("xlsx");

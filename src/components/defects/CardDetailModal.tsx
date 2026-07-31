@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { fetchCardDetail, addComment, deleteDefectCard, updateDefectCardFields } from "@/app/actions/defeitos";
+import { fetchCardDetail, addComment, deleteDefectCard, updateDefectCardFields, updateComment } from "@/app/actions/defeitos";
 import type { DefectCardRow, DefectCommentRow } from "@/lib/types/db";
 import {
   DEFECT_STATUS,
@@ -20,7 +20,9 @@ import { DateBRPickerInput } from "./DateBRPickerInput";
 import { CommentRichEditor, type CommentEditorHandle } from "./CommentRichEditor";
 import { CommentDisplay } from "./CommentDisplay";
 import { buildStoragePath, uploadFileWithProgress } from "@/lib/upload";
-import { FileText, X } from "lucide-react";
+import { FileText, Pencil, X } from "lucide-react";
+import { useAuth } from "@/components/auth/AuthContext";
+import { formatCardCodigo } from "@/lib/cardCodigo";
 
 function isVideoUrl(url: string) {
   return /\.(mp4|webm|mov|m4v)(\?|$)/i.test(url);
@@ -53,11 +55,13 @@ export function CardDetailModal({
   onClose: () => void;
 }) {
   const router = useRouter();
+  const user = useAuth();
   const [loading, setLoading] = useState(false);
   const [card, setCard] = useState<DefectCardRow | null>(null);
   const [comments, setComments] = useState<DefectCommentRow[]>([]);
-  const [commentAutor, setCommentAutor] = useState("");
   const commentEditorRef = useRef<CommentEditorHandle>(null);
+  const editCommentEditorRef = useRef<CommentEditorHandle>(null);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const [editTitulo, setEditTitulo] = useState("");
@@ -130,13 +134,40 @@ export function CardDetailModal({
     if (!plain) return;
     setErr(null);
     try {
-      await addComment(cardId, boardId, html.trim(), commentAutor.trim());
+      await addComment(cardId, boardId, html.trim());
       commentEditorRef.current?.clear();
       await reload();
       router.refresh();
     } catch (ex) {
       setErr(ex instanceof Error ? ex.message : "Erro");
     }
+  };
+
+  const saveCommentEdit = async (commentId: string) => {
+    if (!cardId) return;
+    const plain = editCommentEditorRef.current?.getText()?.trim() ?? "";
+    const html = editCommentEditorRef.current?.getHTML() ?? "";
+    if (!plain) return;
+    setErr(null);
+    try {
+      await updateComment(commentId, cardId, boardId, html.trim());
+      setEditingCommentId(null);
+      await reload();
+      router.refresh();
+    } catch (ex) {
+      setErr(ex instanceof Error ? ex.message : "Erro ao editar comentário");
+    }
+  };
+
+  const canEditComment = (c: DefectCommentRow) => {
+    if (!user) return false;
+    if (user.role === "admin") return true;
+    return (c.autor || "").trim() === user.name.trim();
+  };
+
+  const isCommentEdited = (c: DefectCommentRow) => {
+    if (!c.updated_at) return false;
+    return new Date(c.updated_at).getTime() - new Date(c.created_at).getTime() > 1000;
   };
 
   const saveEdits = async () => {
@@ -243,7 +274,9 @@ export function CardDetailModal({
       >
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto border-b border-slate-200 md:border-b-0 md:border-r">
           <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-4 py-3">
-            <h2 className="text-lg font-semibold text-slate-900">Detalhe do defeito</h2>
+            <div className="min-w-0">
+              <h2 className="text-lg font-semibold text-slate-900">Detalhe do defeito</h2>
+            </div>
             <button type="button" className="rounded p-1 text-slate-500 hover:bg-slate-100" onClick={onClose}>
               <X className="h-5 w-5" />
             </button>
@@ -253,6 +286,12 @@ export function CardDetailModal({
             {err ? <p className="text-sm text-red-700">{err}</p> : null}
             {card ? (
               <>
+                <div>
+                  <p className="text-xs font-medium text-slate-600">ID</p>
+                  <p className="mt-1 inline-flex rounded-md border border-slate-300 bg-slate-100 px-2.5 py-1.5 font-mono text-sm font-bold tracking-wide text-slate-900">
+                    {formatCardCodigo(card.codigo) || "—"}
+                  </p>
+                </div>
                 <div className="grid gap-3 md:grid-cols-2">
                   <label className="text-sm font-medium text-slate-700">
                     Título
@@ -487,24 +526,59 @@ export function CardDetailModal({
             <ul className="max-h-48 flex-1 space-y-3 overflow-y-auto p-4 md:max-h-none">
               {comments.map((c) => (
                 <li key={c.id} className="rounded-lg border border-slate-200 bg-white p-2 text-sm shadow-sm">
-                  <p className="text-xs text-slate-500">
-                    {c.autor || "Anônimo"} · {formatDateTimeBR(c.created_at)}
-                  </p>
-                  <CommentDisplay texto={c.texto} />
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-xs text-slate-500">
+                      {c.autor || "Anônimo"} · {formatDateTimeBR(c.created_at)}
+                      {isCommentEdited(c) ? " · editado" : ""}
+                    </p>
+                    {canEditComment(c) && editingCommentId !== c.id ? (
+                      <button
+                        type="button"
+                        className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                        title="Editar comentário"
+                        onClick={() => setEditingCommentId(c.id)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    ) : null}
+                  </div>
+                  {editingCommentId === c.id ? (
+                    <div className="mt-2 space-y-2">
+                      <CommentRichEditor
+                        key={`edit-${c.id}`}
+                        ref={editCommentEditorRef}
+                        boardId={boardId}
+                        cardId={cardId!}
+                        initialHTML={c.texto}
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          className="rounded-md bg-blue-900 px-2 py-1 text-xs font-medium text-white hover:bg-blue-950"
+                          onClick={() => void saveCommentEdit(c.id)}
+                        >
+                          Salvar
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
+                          onClick={() => setEditingCommentId(null)}
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <CommentDisplay texto={c.texto} />
+                  )}
                 </li>
               ))}
               {comments.length === 0 ? <li className="text-sm text-slate-500">Nenhum comentário.</li> : null}
             </ul>
             <form onSubmit={submitComment} className="border-t border-slate-200 p-4">
-              <label className="text-xs font-medium text-slate-600">
-                Seu nome
-                <input
-                  className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
-                  value={commentAutor}
-                  onChange={(e) => setCommentAutor(e.target.value)}
-                  placeholder="Opcional"
-                />
-              </label>
+              <p className="text-xs text-slate-600">
+                Comentando como <span className="font-semibold text-slate-800">{user?.name ?? "—"}</span>
+              </p>
               <label className="mt-2 block text-xs font-medium text-slate-600">
                 Comentário (texto formatado; cole prints com Ctrl+V)
                 {cardId ? (

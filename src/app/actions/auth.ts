@@ -181,6 +181,6 @@ export async function fetchLogsData() {
   const session = await getSession();
   if (!session) throw new Error("Não autenticado.");
   if (session.role !== "admin") throw new Error("Sem permissão.");
-  const logs = await listAuditLogs(300);
+  const logs = await listAuditLogs(500);
   return { session, logs };
 }

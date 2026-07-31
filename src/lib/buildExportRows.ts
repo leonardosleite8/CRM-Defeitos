@@ -1,17 +1,22 @@
 import type { DefectCardRow } from "@/lib/types/db";
 import { formatDateBR } from "@/lib/date";
 import { flattenForExport } from "@/lib/exportFlatten";
+import { formatCardCodigo } from "@/lib/cardCodigo";
 
 /** Linhas normalizadas para Excel e CSV (valores já são strings “humanas”). */
-export function buildExportRows(cards: DefectCardRow[]) {
+export function buildExportRows(
+  cards: DefectCardRow[],
+  etapaByColumnId: Record<string, string> = {},
+) {
   return cards.map((c) => ({
-    id: c.id,
+    id: formatCardCodigo(c.codigo) || flattenForExport(c.id),
     titulo: flattenForExport(c.titulo),
     descricao: flattenForExport(c.descricao),
     solucao: flattenForExport(c.solucao),
     origem: flattenForExport(c.origem),
     setor_responsavel: flattenForExport(c.setor_responsavel),
     status: flattenForExport(c.status),
+    Etapa: flattenForExport(etapaByColumnId[c.column_id] ?? ""),
     severidade: flattenForExport(c.severidade),
     modelo_produto: flattenForExport(c.modelo_produto),
     linha: flattenForExport(c.linha),

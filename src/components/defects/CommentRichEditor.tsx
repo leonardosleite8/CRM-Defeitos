@@ -15,10 +15,11 @@ export type CommentEditorHandle = {
 type Props = {
   boardId: string;
   cardId: string;
+  initialHTML?: string;
 };
 
 export const CommentRichEditor = forwardRef<CommentEditorHandle, Props>(function CommentEditor(
-  { boardId, cardId },
+  { boardId, cardId, initialHTML = "" },
   ref,
 ) {
   const editorRef = useRef<Editor | null>(null);
@@ -60,7 +61,7 @@ export const CommentRichEditor = forwardRef<CommentEditorHandle, Props>(function
       }),
       Image.configure({ inline: true, allowBase64: false }),
     ],
-    content: "",
+    content: initialHTML || "",
     immediatelyRender: false,
     editorProps: {
       handlePaste: (view, event) => handlePaste(view, event as ClipboardEvent),

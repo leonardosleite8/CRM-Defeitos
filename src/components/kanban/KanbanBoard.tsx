@@ -222,9 +222,9 @@ export function KanbanBoard({ boardId, initial }: { boardId: string; initial: Bo
     const moving = sourceVisible.find((c) => c.id === draggableId);
     if (!moving) return;
 
+    // Sempre entra no topo da coluna de destino; depois o usuário reordena à vontade.
     const nextSourceVisible = sourceVisible.filter((c) => c.id !== draggableId);
-    const nextDestVisible = [...destVisible];
-    nextDestVisible.splice(destination.index, 0, { ...moving, column_id: destColId });
+    const nextDestVisible = [{ ...moving, column_id: destColId }, ...destVisible];
 
     const sourceAll = cards.filter((c) => c.column_id === sourceColId && c.id !== draggableId);
     const destAll = cards.filter((c) => c.column_id === destColId && c.id !== draggableId);
@@ -247,7 +247,7 @@ export function KanbanBoard({ boardId, initial }: { boardId: string; initial: Bo
 
     void (async () => {
       try {
-        await moveCardToColumn(draggableId, boardId, destColId, sourceColId, destination.index);
+        await moveCardToColumn(draggableId, boardId, destColId, sourceColId, 0);
         await Promise.all([
           reorderCardsInColumn(
             boardId,

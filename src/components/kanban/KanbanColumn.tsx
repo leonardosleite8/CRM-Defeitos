@@ -68,7 +68,15 @@ export function KanbanColumn({
               autoFocus
             />
           ) : (
-            <h2 className="truncate text-sm font-semibold text-slate-900">{column.titulo}</h2>
+            <div className="flex min-w-0 items-center gap-2">
+              <h2 className="truncate text-sm font-semibold text-slate-900">{column.titulo}</h2>
+              <span
+                className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-slate-100 px-1.5 text-[11px] font-semibold tabular-nums text-slate-700"
+                title={`${cards.length} card(s)`}
+              >
+                {cards.length}
+              </span>
+            </div>
           )}
         </div>
         <div className="flex items-center gap-1">

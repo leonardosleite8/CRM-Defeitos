@@ -20,6 +20,8 @@ export type DefectCardRow = {
   id: string;
   board_id: string;
   column_id: string;
+  /** Código global único (não reutilizado após exclusão). */
+  codigo: number;
   ordem: number;
   titulo: string;
   descricao: string | null;
@@ -44,6 +46,7 @@ export type DefectCommentRow = {
   autor: string | null;
   texto: string;
   created_at: string;
+  updated_at?: string | null;
 };
 
 export type BoardPayload = {

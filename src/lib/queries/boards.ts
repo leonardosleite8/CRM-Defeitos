@@ -43,8 +43,10 @@ function asStringArray(v: unknown): string[] {
 export function normalizeCard(row: Record<string, unknown>): DefectCardRow {
   const r = row as DefectCardRow;
   const ordemNum = Number(row.ordem);
+  const codigoNum = Number(row.codigo);
   return {
     ...r,
+    codigo: Number.isFinite(codigoNum) ? codigoNum : 0,
     ordem: Number.isFinite(ordemNum) ? ordemNum : 0,
     solucao: (row.solucao as string | null | undefined) ?? null,
     origem: ((row.origem as DefectOrigem | null | undefined) ?? "Outros") as DefectOrigem,
@@ -54,6 +56,59 @@ export function normalizeCard(row: Record<string, unknown>): DefectCardRow {
     media_urls: asStringArray(row.media_urls),
     previsao_conclusao: (row.previsao_conclusao as string | null | undefined) ?? null,
   };
+}
+
+/** Garante que todo card tenha codigo sequencial (exibido como CD0001). */
+export async function ensureDefectCardCodigos() {
+  const supabase = createServerSupabase();
+
+  const { error: rpcError } = await supabase.rpc("ensure_defect_card_codigos");
+  if (!rpcError) return;
+
+  // Fallback sem RPC: atribui códigos faltantes em JS.
+  const { data: rows, error } = await supabase
+    .from("defect_cards")
+    .select("id,codigo,data_criacao")
+    .order("data_criacao", { ascending: true });
+
+  if (error) {
+    if (/codigo/i.test(error.message) || error.code === "42703") {
+      console.warn(
+        "[ensureDefectCardCodigos] Coluna codigo ausente. Execute a migration 015_ensure_card_codigos.sql no Supabase.",
+      );
+      return;
+    }
+    throw new Error(error.message);
+  }
+
+  const list = rows ?? [];
+  let maxCode = 0;
+  for (const row of list) {
+    const n = Number(row.codigo);
+    if (Number.isFinite(n) && n > maxCode) maxCode = n;
+  }
+
+  const missing = list.filter((row) => {
+    const n = Number(row.codigo);
+    return !Number.isFinite(n) || n <= 0;
+  });
+
+  for (const row of missing) {
+    maxCode += 1;
+    const { error: upErr } = await supabase
+      .from("defect_cards")
+      .update({ codigo: maxCode })
+      .eq("id", row.id);
+    if (upErr) {
+      if (/codigo/i.test(upErr.message) || upErr.code === "42703") {
+        console.warn(
+          "[ensureDefectCardCodigos] Coluna codigo ausente. Execute a migration 015_ensure_card_codigos.sql no Supabase.",
+        );
+        return;
+      }
+      throw new Error(upErr.message);
+    }
+  }
 }
 
 export async function listBoards() {
@@ -67,6 +122,7 @@ export async function listBoards() {
 }
 
 export async function getBoardPayload(boardId: string): Promise<BoardPayload> {
+  await ensureDefectCardCodigos();
   const supabase = createServerSupabase();
   const { data: board, error: e1 } = await supabase
     .from("boards")
@@ -108,6 +164,7 @@ export async function getBoardPayload(boardId: string): Promise<BoardPayload> {
 }
 
 export async function getCardDetail(cardId: string) {
+  await ensureDefectCardCodigos();
   const supabase = createServerSupabase();
   const { data: cardRow, error: e1 } = await supabase.from("defect_cards").select("*").eq("id", cardId).single();
   if (e1 || !cardRow) throw new Error(e1?.message ?? "Card não encontrado");
@@ -128,6 +185,7 @@ export type DashboardFilters = {
 };
 
 export async function getDashboardData(filters: DashboardFilters = {}) {
+  await ensureDefectCardCodigos();
   const supabase = createServerSupabase();
   let q = supabase.from("defect_cards").select("*");
   if (filters.modelo) q = q.contains("modelo_produto", [filters.modelo]);
@@ -137,6 +195,9 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
   const { data: cards, error } = await q;
   if (error) throw new Error(error.message);
   const list = (cards ?? []).map((c) => normalizeCard(c as Record<string, unknown>));
+
+  const { data: columns } = await supabase.from("kanban_columns").select("id,titulo");
+  const etapaByColumnId = new Map((columns ?? []).map((c) => [c.id as string, c.titulo as string]));
 
   const byModel = new Map<string, number>();
   const bySev = new Map<string, number>();
@@ -163,6 +224,7 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
 
   return {
     cards: list,
+    etapaByColumnId: Object.fromEntries(etapaByColumnId),
     chartModel: Array.from(byModel.entries()).map(([name, value]) => ({ name, value })),
     chartSev: Array.from(bySev.entries()).map(([name, value]) => ({ name, value })),
     leadTimeDays,
