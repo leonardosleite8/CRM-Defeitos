@@ -51,3 +51,47 @@ export function maskDateBRInput(raw: string): string {
   if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
   return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
 }
+
+const MONTH_NAMES_PT = [
+  "JANEIRO",
+  "FEVEREIRO",
+  "MARÇO",
+  "ABRIL",
+  "MAIO",
+  "JUNHO",
+  "JULHO",
+  "AGOSTO",
+  "SETEMBRO",
+  "OUTUBRO",
+  "NOVEMBRO",
+  "DEZEMBRO",
+] as const;
+
+/** Nome do mês em PT maiúsculo (mês 1–12). */
+export function monthNamePT(month: number): string {
+  return MONTH_NAMES_PT[month - 1] ?? String(month);
+}
+
+/** Ex.: JULHO/2026 */
+export function formatMonthYearPT(year: number, month: number): string {
+  return `${monthNamePT(month)}/${year}`;
+}
+
+/**
+ * Intervalo [start, endExclusive) em ISO UTC para meses civis em America/Sao_Paulo (UTC−3 fixo).
+ * month: 1–12
+ */
+export function periodBoundsSaoPaulo(input: {
+  fromYear: number;
+  fromMonth: number;
+  toYear: number;
+  toMonth: number;
+}): { startIso: string; endExclusiveIso: string } {
+  const { fromYear, fromMonth, toYear, toMonth } = input;
+  // 00:00 SP = 03:00 UTC
+  const startIso = new Date(Date.UTC(fromYear, fromMonth - 1, 1, 3, 0, 0, 0)).toISOString();
+  // 1º dia do mês seguinte a `to`, 00:00 SP
+  const endExclusiveIso = new Date(Date.UTC(toYear, toMonth, 1, 3, 0, 0, 0)).toISOString();
+  return { startIso, endExclusiveIso };
+}
+

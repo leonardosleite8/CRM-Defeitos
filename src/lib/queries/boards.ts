@@ -1,6 +1,7 @@
 import { createServerSupabase } from "@/lib/supabase/server";
 import type { BoardPayload, DefectCardRow, KanbanColumnRow } from "@/lib/types/db";
 import type { DefectSeveridade, DefectOrigem } from "@/lib/constants";
+import { periodBoundsSaoPaulo } from "@/lib/date";
 
 function tryParseJsonArray(s: string): string[] | null {
   const t = s.trim();
@@ -122,7 +123,6 @@ export async function listBoards() {
 }
 
 export async function getBoardPayload(boardId: string): Promise<BoardPayload> {
-  await ensureDefectCardCodigos();
   const supabase = createServerSupabase();
   const { data: board, error: e1 } = await supabase
     .from("boards")
@@ -164,7 +164,6 @@ export async function getBoardPayload(boardId: string): Promise<BoardPayload> {
 }
 
 export async function getCardDetail(cardId: string) {
-  await ensureDefectCardCodigos();
   const supabase = createServerSupabase();
   const { data: cardRow, error: e1 } = await supabase.from("defect_cards").select("*").eq("id", cardId).single();
   if (e1 || !cardRow) throw new Error(e1?.message ?? "Card não encontrado");
@@ -185,7 +184,6 @@ export type DashboardFilters = {
 };
 
 export async function getDashboardData(filters: DashboardFilters = {}) {
-  await ensureDefectCardCodigos();
   const supabase = createServerSupabase();
   let q = supabase.from("defect_cards").select("*");
   if (filters.modelo) q = q.contains("modelo_produto", [filters.modelo]);
@@ -231,3 +229,116 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
     total: list.length,
   };
 }
+
+export type EntregaCardRow = DefectCardRow & {
+  quadro_titulo: string;
+  etapa: string;
+};
+
+export type EntregasPeriodoInput = {
+  fromYear: number;
+  fromMonth: number;
+  toYear: number;
+  toMonth: number;
+  boardId?: string;
+};
+
+export async function getEntregasNoPeriodo(input: EntregasPeriodoInput) {
+  const supabase = createServerSupabase();
+
+  if (
+    input.fromYear > input.toYear ||
+    (input.fromYear === input.toYear && input.fromMonth > input.toMonth)
+  ) {
+    throw new Error("O período inicial não pode ser depois do período final.");
+  }
+
+  const { startIso, endExclusiveIso } = periodBoundsSaoPaulo(input);
+
+  const cardSelect =
+    "id,board_id,column_id,codigo,ordem,titulo,descricao,solucao,origem,setor_responsavel,status,severidade,modelo_produto,linha,media_urls,responsavel,data_criacao,data_atualizacao,data_conclusao,previsao_conclusao";
+
+  let cardsQuery = supabase
+    .from("defect_cards")
+    .select(cardSelect)
+    .not("data_conclusao", "is", null)
+    .gte("data_conclusao", startIso)
+    .lt("data_conclusao", endExclusiveIso)
+    .order("data_conclusao", { ascending: false });
+
+  if (input.boardId) {
+    cardsQuery = cardsQuery.eq("board_id", input.boardId);
+  }
+
+  let missingQuery = supabase
+    .from("defect_cards")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "Concluído")
+    .is("data_conclusao", null);
+  if (input.boardId) {
+    missingQuery = missingQuery.eq("board_id", input.boardId);
+  }
+
+  const [cardsRes, boardsRes, columnsRes, missingRes] = await Promise.all([
+    cardsQuery,
+    supabase.from("boards").select("id,titulo").order("titulo"),
+    supabase.from("kanban_columns").select("id,titulo"),
+    missingQuery,
+  ]);
+
+  if (cardsRes.error) throw new Error(cardsRes.error.message);
+  if (boardsRes.error) throw new Error(boardsRes.error.message);
+  if (columnsRes.error) throw new Error(columnsRes.error.message);
+
+  const list = (cardsRes.data ?? []).map((c) => normalizeCard(c as Record<string, unknown>));
+  const boards = boardsRes.data ?? [];
+  const boardTitleById = new Map(boards.map((b) => [b.id as string, b.titulo as string]));
+  const etapaByColumnId = new Map(
+    (columnsRes.data ?? []).map((c) => [c.id as string, c.titulo as string]),
+  );
+
+  const enriched: EntregaCardRow[] = list.map((c) => ({
+    ...c,
+    quadro_titulo: boardTitleById.get(c.board_id) ?? "—",
+    etapa: etapaByColumnId.get(c.column_id) ?? "—",
+  }));
+
+  const byModel = new Map<string, number>();
+  const bySev = new Map<string, number>();
+  let leadSumMs = 0;
+  let leadCount = 0;
+
+  for (const c of enriched) {
+    for (const m of c.modelo_produto) {
+      byModel.set(m, (byModel.get(m) ?? 0) + 1);
+    }
+    bySev.set(c.severidade, (bySev.get(c.severidade) ?? 0) + 1);
+    if (c.data_conclusao) {
+      const start = new Date(c.data_criacao).getTime();
+      const end = new Date(c.data_conclusao).getTime();
+      if (end > start) {
+        leadSumMs += end - start;
+        leadCount += 1;
+      }
+    }
+  }
+
+  const MS_PER_DAY = 1000 * 60 * 60 * 24;
+  const leadTimeDays = leadCount ? leadSumMs / leadCount / MS_PER_DAY : null;
+
+  return {
+    cards: enriched,
+    total: enriched.length,
+    leadTimeDays,
+    chartModel: Array.from(byModel.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value),
+    chartSev: Array.from(bySev.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value),
+    boards: boards.map((b) => ({ id: b.id as string, titulo: b.titulo as string })),
+    etapaByColumnId: Object.fromEntries(etapaByColumnId),
+    missingConclusaoCount: missingRes.count ?? 0,
+  };
+}
+

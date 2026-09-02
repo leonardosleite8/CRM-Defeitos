@@ -10,6 +10,7 @@ import {
   Settings,
   LogOut,
   ScrollText,
+  PackageCheck,
 } from "lucide-react";
 import { logoutAction } from "@/app/actions/auth";
 import type { SessionUser } from "@/lib/auth/session";
@@ -18,6 +19,7 @@ import { AuthProvider } from "@/components/auth/AuthContext";
 const nav = [
   { href: "/", label: "Quadros", icon: LayoutGrid },
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
+  { href: "/entregas", label: "Entregas", icon: PackageCheck },
   { href: "/plano-de-acao", label: "Plano de ação", icon: ClipboardList },
 ];
 

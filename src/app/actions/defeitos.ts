@@ -178,8 +178,6 @@ export async function createDefectCard(input: {
   if (!input.modeloProduto.length) throw new Error("Selecione ao menos um modelo de produto.");
   if (!input.linha.length) throw new Error("Selecione ao menos uma linha.");
 
-  await ensureDefectCardCodigos();
-
   const supabase = createServerSupabase();
   const session = await getSession();
   const { data: col } = await supabase
