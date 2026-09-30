@@ -28,7 +28,7 @@ export default async function HomePage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-8">
+    <div className="w-full max-w-6xl space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">Quadros</h1>
