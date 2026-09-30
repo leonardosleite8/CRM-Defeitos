@@ -13,7 +13,7 @@ export default async function HomePage() {
   if (!hasEnv()) {
     return (
       <div className="mx-auto max-w-2xl space-y-6">
-        <h1 className="text-2xl font-bold text-slate-900">Defeitos de Produtos</h1>
+        <h1 className="text-2xl font-bold text-slate-900">Qualidade Urano</h1>
         <ConfigAlert />
       </div>
     );
@@ -28,11 +28,11 @@ export default async function HomePage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="mx-auto w-full max-w-6xl space-y-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Quadros</h1>
-          <p className="text-sm text-slate-600">Gerencie defeitos por quadro Kanban.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Quadros</h1>
+          <p className="mt-1 text-base text-slate-600">Gerencie defeitos por quadro Kanban.</p>
         </div>
         <form
           action={async () => {
@@ -60,21 +60,33 @@ export default async function HomePage() {
           </div>
         </div>
       ) : boards.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center">
-          <LayoutGrid className="mx-auto h-10 w-10 text-slate-400" />
-          <p className="mt-3 text-slate-700">Nenhum quadro ainda. Crie o primeiro.</p>
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-16 text-center">
+          <LayoutGrid className="mx-auto h-12 w-12 text-slate-400" />
+          <p className="mt-4 text-lg text-slate-700">Nenhum quadro ainda. Crie o primeiro.</p>
         </div>
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2">
+        <ul className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
           {boards.map((b) => (
             <li key={b.id}>
               <Link
                 href={`/quadros/${b.id}`}
-                className="block rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-blue-900/40 hover:shadow-md"
+                className="group flex min-h-44 flex-col justify-between rounded-2xl border border-slate-200 border-l-4 border-l-blue-900 bg-white p-6 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-blue-900 hover:shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-900"
               >
-                <h2 className="font-semibold text-slate-900">{b.titulo}</h2>
-                <p className="mt-1 text-xs text-slate-500">
-                  Atualizado em {formatDateTimeBR(b.updated_at)}
+                <div className="flex items-start gap-4">
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-900 transition group-hover:bg-blue-900 group-hover:text-white">
+                    <LayoutGrid className="h-6 w-6" />
+                  </span>
+                  <div className="min-w-0">
+                    <h2 className="text-xl font-semibold leading-snug text-slate-900 group-hover:text-blue-950">
+                      {b.titulo}
+                    </h2>
+                    <p className="mt-2 text-sm text-slate-500">
+                      Atualizado em {formatDateTimeBR(b.updated_at)}
+                    </p>
+                  </div>
+                </div>
+                <p className="mt-6 text-sm font-medium text-blue-900 opacity-0 transition group-hover:opacity-100">
+                  Abrir quadro
                 </p>
               </Link>
             </li>

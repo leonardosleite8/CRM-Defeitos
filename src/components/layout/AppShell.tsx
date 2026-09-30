@@ -45,7 +45,7 @@ export function AppShell({
             className="h-auto w-32 brightness-0 invert"
             priority
           />
-          <h1 className="mt-1 text-lg font-semibold leading-tight">Defeitos de Produtos</h1>
+          <h1 className="mt-1 text-lg font-semibold leading-tight">Qualidade Urano</h1>
         </div>
         <nav className="flex flex-1 flex-col gap-1 p-3">
           {nav.map((item) => {
@@ -105,7 +105,7 @@ export function AppShell({
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-3 md:hidden">
-          <h1 className="text-sm font-semibold text-slate-900">Defeitos de Produtos</h1>
+          <h1 className="text-sm font-semibold text-slate-900">Qualidade Urano</h1>
           <div className="flex flex-wrap justify-end gap-2">
             {nav.map((item) => (
               <Link
