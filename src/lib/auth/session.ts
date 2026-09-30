@@ -2,11 +2,18 @@ import { SignJWT, jwtVerify } from "jose";
 
 export const SESSION_COOKIE = "dp_session";
 
+export type AppRole = "admin" | "user" | "observer";
+
+export function parseAppRole(role: unknown): AppRole {
+  if (role === "admin" || role === "observer" || role === "user") return role;
+  return "user";
+}
+
 export type SessionUser = {
   id: string;
   email: string;
   name: string;
-  role: "admin" | "user";
+  role: AppRole;
 };
 
 function getSecret() {
@@ -36,7 +43,7 @@ export async function verifySessionToken(token: string): Promise<SessionUser | n
       id: String(payload.id),
       email: String(payload.email),
       name: String(payload.name),
-      role: payload.role === "admin" ? "admin" : "user",
+      role: parseAppRole(payload.role),
     };
   } catch {
     return null;

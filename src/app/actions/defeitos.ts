@@ -5,6 +5,7 @@ import type { DefectOrigem, DefectSeveridade, DefectStatus } from "@/lib/constan
 import { getCardDetail, ensureDefectCardCodigos } from "@/lib/queries/boards";
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth/getSession";
+import { assertCanMutate } from "@/lib/auth/guard";
 import { writeAuditLog } from "@/lib/auth/users";
 import { buildFieldDiffDetail } from "@/lib/auditLabels";
 import { formatCardCodigo } from "@/lib/cardCodigo";
@@ -66,6 +67,7 @@ async function findConcluidoColumn(boardId: string) {
 }
 
 export async function updateBoardTitulo(boardId: string, titulo: string) {
+  await assertCanMutate();
   const supabase = createServerSupabase();
   const t = titulo.trim();
   if (!t) throw new Error("Título do quadro não pode ser vazio.");
@@ -75,6 +77,7 @@ export async function updateBoardTitulo(boardId: string, titulo: string) {
 }
 
 export async function createBoardWithDefaults(titulo: string) {
+  await assertCanMutate();
   const supabase = createServerSupabase();
   const { data: board, error: e1 } = await supabase
     .from("boards")
@@ -96,6 +99,7 @@ export async function createBoardWithDefaults(titulo: string) {
 }
 
 export async function deleteBoard(boardId: string) {
+  await assertCanMutate();
   const supabase = createServerSupabase();
   const { error } = await supabase.from("boards").delete().eq("id", boardId);
   if (error) throw new Error(error.message);
@@ -104,6 +108,7 @@ export async function deleteBoard(boardId: string) {
 }
 
 export async function createColumn(boardId: string, titulo: string) {
+  await assertCanMutate();
   const supabase = createServerSupabase();
   const t = titulo.trim();
   if (!t) throw new Error("Informe um nome para a coluna.");
@@ -126,6 +131,7 @@ export async function createColumn(boardId: string, titulo: string) {
 }
 
 export async function renameColumn(columnId: string, boardId: string, titulo: string) {
+  await assertCanMutate();
   const supabase = createServerSupabase();
   const t = titulo.trim();
   if (!t) throw new Error("Nome da coluna não pode ser vazio.");
@@ -135,6 +141,7 @@ export async function renameColumn(columnId: string, boardId: string, titulo: st
 }
 
 export async function deleteColumn(columnId: string, boardId: string) {
+  await assertCanMutate();
   const supabase = createServerSupabase();
   const { count } = await supabase
     .from("defect_cards")
@@ -149,6 +156,7 @@ export async function deleteColumn(columnId: string, boardId: string) {
 }
 
 export async function reorderColumns(boardId: string, orderedColumnIds: string[]) {
+  await assertCanMutate();
   if (!orderedColumnIds.length) return;
   const supabase = createServerSupabase();
   const updates = orderedColumnIds.map((id, index) =>
@@ -175,6 +183,7 @@ export async function createDefectCard(input: {
   mediaUrls: string[];
   previsaoConclusao: string | null;
 }) {
+  await assertCanMutate();
   if (!input.modeloProduto.length) throw new Error("Selecione ao menos um modelo de produto.");
   if (!input.linha.length) throw new Error("Selecione ao menos uma linha.");
 
@@ -286,6 +295,7 @@ export async function createDefectCard(input: {
 }
 
 export async function updateDefectCardMedia(cardId: string, boardId: string, mediaUrls: string[]) {
+  await assertCanMutate();
   const supabase = createServerSupabase();
   const session = await getSession();
   const { data: before } = await supabase
@@ -312,6 +322,7 @@ export async function reorderCardsInColumn(
   columnId: string,
   orderedCardIds: string[],
 ) {
+  await assertCanMutate();
   if (!orderedCardIds.length) return;
   const supabase = createServerSupabase();
 
@@ -396,8 +407,8 @@ export async function moveCardToColumn(
   /** Ignorado: mudança de coluna sempre vai ao topo. */
   _destinationIndex = 0,
 ) {
+  const session = await assertCanMutate();
   const supabase = createServerSupabase();
-  const session = await getSession();
 
   const { data: before } = await supabase
     .from("defect_cards")
@@ -475,8 +486,8 @@ export async function updateDefectCardFields(
     previsao_conclusao: string | null;
   }>,
 ) {
+  const session = await assertCanMutate();
   const supabase = createServerSupabase();
-  const session = await getSession();
 
   const { data: before, error: beforeErr } = await supabase
     .from("defect_cards")
@@ -514,8 +525,8 @@ export async function updateDefectCardFields(
 }
 
 export async function deleteDefectCard(cardId: string, boardId: string) {
+  const session = await assertCanMutate();
   const supabase = createServerSupabase();
-  const session = await getSession();
   const { data: before } = await supabase
     .from("defect_cards")
     .select("id,codigo,titulo")
@@ -534,8 +545,8 @@ export async function deleteDefectCard(cardId: string, boardId: string) {
 }
 
 export async function addComment(cardId: string, boardId: string, texto: string, _autorIgnored?: string) {
+  const session = await assertCanMutate();
   const supabase = createServerSupabase();
-  const session = await getSession();
   if (!session) throw new Error("Faça login para comentar.");
   const autor = session.name.trim() || session.email;
 
@@ -566,9 +577,8 @@ export async function updateComment(
   boardId: string,
   texto: string,
 ) {
+  const session = await assertCanMutate();
   const supabase = createServerSupabase();
-  const session = await getSession();
-  if (!session) throw new Error("Faça login para editar comentário.");
 
   const { data: existing, error: fetchErr } = await supabase
     .from("defect_comments")

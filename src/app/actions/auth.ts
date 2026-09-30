@@ -17,6 +17,7 @@ import {
   listUsers,
   writeAuditLog,
 } from "@/lib/auth/users";
+import { parseAppRole, type AppRole } from "@/lib/auth/session";
 import { createServerSupabase } from "@/lib/supabase/server";
 
 export async function loginAction(formData: FormData) {
@@ -94,7 +95,7 @@ export async function createUserAction(formData: FormData) {
     .trim()
     .toLowerCase();
   const password = String(formData.get("password") ?? "");
-  const role = String(formData.get("role") ?? "user") === "admin" ? "admin" : "user";
+  const role = parseAppRole(formData.get("role"));
   if (!name || !email || password.length < 6) {
     return { error: "Preencha nome, e-mail e senha (mín. 6 caracteres)." };
   }
@@ -130,7 +131,7 @@ async function getTargetUser(userId: string) {
     id: string;
     name: string;
     email: string;
-    role: "admin" | "user";
+    role: AppRole;
     active: boolean;
   };
 }
@@ -161,12 +162,12 @@ export async function toggleUserActiveAction(userId: string, active: boolean) {
 }
 
 /** Altera o perfil (role) de um usuário. Não permite alterar permissões de administradores. */
-export async function updateUserRoleAction(userId: string, role: "admin" | "user") {
+export async function updateUserRoleAction(userId: string, role: AppRole) {
   const session = await getSession();
   if (!session || session.role !== "admin") {
     throw new Error("Sem permissão.");
   }
-  if (role !== "admin" && role !== "user") {
+  if (role !== "admin" && role !== "user" && role !== "observer") {
     throw new Error("Perfil inválido.");
   }
 
@@ -231,6 +232,7 @@ export async function updateUserProfileAction(formData: FormData) {
 export async function changePasswordAction(formData: FormData) {
   const session = await getSession();
   if (!session) return { error: "Não autenticado." };
+  if (session.role === "observer") return { error: "O perfil Observador só pode visualizar." };
   const password = String(formData.get("password") ?? "");
   if (password.length < 6) return { error: "Senha mínima de 6 caracteres." };
   const supabase = createServerSupabase();
@@ -247,6 +249,7 @@ export async function changePasswordAction(formData: FormData) {
 export async function changeNameAction(formData: FormData) {
   const session = await getSession();
   if (!session) return { error: "Não autenticado." };
+  if (session.role === "observer") return { error: "O perfil Observador só pode visualizar." };
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { error: "Informe um nome." };
   const supabase = createServerSupabase();

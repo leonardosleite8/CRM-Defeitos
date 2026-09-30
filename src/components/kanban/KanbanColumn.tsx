@@ -14,6 +14,7 @@ export function KanbanColumn({
   onRenameColumn,
   onDeleteColumn,
   busy = false,
+  readOnly = false,
   columnDragHandleProps,
 }: {
   column: KanbanColumnRow;
@@ -22,6 +23,7 @@ export function KanbanColumn({
   onRenameColumn: (columnId: string, nextName: string) => Promise<void>;
   onDeleteColumn: (columnId: string) => void;
   busy?: boolean;
+  readOnly?: boolean;
   columnDragHandleProps?: DraggableProvidedDragHandleProps | null;
 }) {
   const [editing, setEditing] = useState(false);
@@ -42,6 +44,7 @@ export function KanbanColumn({
     <div className="flex w-72 shrink-0 flex-col rounded-xl border border-slate-200 bg-slate-50/80">
       <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
+          {!readOnly ? (
           <button
             type="button"
             className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
@@ -50,6 +53,7 @@ export function KanbanColumn({
           >
             <GripHorizontal className="h-4 w-4 shrink-0" />
           </button>
+          ) : null}
           {editing ? (
             <input
               value={name}
@@ -79,6 +83,7 @@ export function KanbanColumn({
             </div>
           )}
         </div>
+        {!readOnly ? (
         <div className="flex items-center gap-1">
           {editing ? (
             <>
@@ -125,6 +130,7 @@ export function KanbanColumn({
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
+        ) : null}
       </div>
       <Droppable droppableId={column.id} type="CARD">
         {(provided, snapshot) => (
@@ -136,15 +142,17 @@ export function KanbanColumn({
             }`}
           >
             {cards.map((card, i) => (
-              <Draggable key={card.id} draggableId={card.id} index={i}>
+              <Draggable key={card.id} draggableId={card.id} index={i} isDragDisabled={readOnly}>
                 {(dragProvided) => (
                   <div ref={dragProvided.innerRef} {...dragProvided.draggableProps} className="rounded-lg">
+                    {!readOnly ? (
                     <div
                       {...dragProvided.dragHandleProps}
                       className="mb-1 flex cursor-grab items-center gap-1 rounded border border-dashed border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium uppercase text-slate-500 hover:bg-slate-100"
                     >
                       Arrastar
                     </div>
+                    ) : null}
                     <DefectCardPreview card={card} onOpen={() => onOpenCard(card.id)} />
                   </div>
                 )}

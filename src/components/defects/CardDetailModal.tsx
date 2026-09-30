@@ -79,6 +79,8 @@ export function CardDetailModal({
   const [editPrevisao, setEditPrevisao] = useState("");
   const [saving, setSaving] = useState(false);
   const [filesToUpload, setFilesToUpload] = useState<File[]>([]);
+  const [dragOver, setDragOver] = useState(false);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
 
@@ -160,7 +162,7 @@ export function CardDetailModal({
   };
 
   const canEditComment = (c: DefectCommentRow) => {
-    if (!user) return false;
+    if (!user || user.role === "observer") return false;
     if (user.role === "admin") return true;
     return (c.autor || "").trim() === user.name.trim();
   };
@@ -206,14 +208,16 @@ export function CardDetailModal({
     }
   };
 
-  const uploadAttachments = async () => {
-    if (!cardId || !card || filesToUpload.length === 0) return;
+  const uploadAttachments = async (incoming?: File[]) => {
+    const batch = Array.isArray(incoming) ? incoming : filesToUpload;
+    if (!cardId || !card || batch.length === 0 || uploading) return;
+    setFilesToUpload(batch);
     setUploading(true);
     setErr(null);
     try {
       const urls: string[] = [];
-      for (let i = 0; i < filesToUpload.length; i++) {
-        const file = filesToUpload[i];
+      for (let i = 0; i < batch.length; i++) {
+        const file = batch[i];
         const key = `${i}-${file.name}`;
         const path = buildStoragePath(boardId, cardId, file);
         const { publicUrl } = await uploadFileWithProgress(file, path, (pct) => {
@@ -264,14 +268,47 @@ export function CardDetailModal({
   if (!open || !cardId) return null;
 
   const critical = card?.severidade === "Crítica";
+  const readOnly = user?.role === "observer";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2 md:p-4" role="dialog">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2 md:p-4"
+      role="dialog"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div
-        className={`flex max-h-[95vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border bg-white shadow-2xl md:flex-row ${
+        className={`relative flex max-h-[95vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border bg-white shadow-2xl md:flex-row ${
           critical ? "border-red-600 ring-2 ring-red-500" : "border-slate-200"
-        }`}
+        } ${dragOver ? "ring-2 ring-blue-900" : ""}`}
+        onDragEnter={(e) => {
+          if (readOnly || !e.dataTransfer.types.includes("Files")) return;
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragOver={(e) => {
+          if (readOnly || !e.dataTransfer.types.includes("Files")) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "copy";
+        }}
+        onDragLeave={(e) => {
+          if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+          setDragOver(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          if (readOnly) return;
+          const dropped = Array.from(e.dataTransfer.files ?? []);
+          if (dropped.length > 0) void uploadAttachments(dropped);
+        }}
       >
+        {dragOver ? (
+          <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-blue-950/70 text-center text-white">
+            <p className="text-lg font-semibold">Solte os arquivos para anexar</p>
+          </div>
+        ) : null}
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto border-b border-slate-200 md:border-b-0 md:border-r">
           <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-4 py-3">
             <div className="min-w-0">
@@ -286,6 +323,7 @@ export function CardDetailModal({
             {err ? <p className="text-sm text-red-700">{err}</p> : null}
             {card ? (
               <>
+                <fieldset disabled={readOnly} className="min-w-0 space-y-4 border-0 p-0">
                 <div>
                   <p className="text-xs font-medium text-slate-600">ID</p>
                   <p className="mt-1 inline-flex rounded-md border border-slate-300 bg-slate-100 px-2.5 py-1.5 font-mono text-sm font-bold tracking-wide text-slate-900">
@@ -399,6 +437,8 @@ export function CardDetailModal({
                     onChange={(e) => setEditSolucao(e.target.value)}
                   />
                 </label>
+                </fieldset>
+                {!readOnly ? (
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
@@ -416,6 +456,7 @@ export function CardDetailModal({
                     Excluir card
                   </button>
                 </div>
+                ) : null}
                 <ul className="space-y-1 text-xs text-slate-600">
                   <li>Data de criação: {formatDateBR(card.data_criacao)}</li>
                   <li>Data de conclusão: {formatDateBR(card.data_conclusao)}</li>
@@ -424,17 +465,31 @@ export function CardDetailModal({
 
                 <div>
                   <h3 className="text-sm font-semibold text-slate-900">Anexos</h3>
+                  {!readOnly ? (
                   <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
-                    <label className="block text-sm font-medium text-slate-700">
+                    <p className="text-sm font-medium text-slate-700">
                       Adicionar anexos (fotos, vídeos, PDF, DOC, Excel)
-                      <input
-                        type="file"
-                        multiple
-                        accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.csv"
-                        className="mt-1 w-full text-sm"
-                        onChange={(e) => setFilesToUpload(Array.from(e.target.files ?? []))}
-                      />
-                    </label>
+                    </p>
+                    <input
+                      ref={attachmentInputRef}
+                      type="file"
+                      multiple
+                      accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.csv"
+                      className="hidden"
+                      onChange={(e) => {
+                        const chosen = Array.from(e.target.files ?? []);
+                        if (chosen.length > 0) setFilesToUpload(chosen);
+                        e.target.value = "";
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => attachmentInputRef.current?.click()}
+                      className="mt-2 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-100"
+                    >
+                      Escolher arquivos
+                    </button>
+                    <p className="mt-2 text-xs text-slate-500">Ou arraste os arquivos para dentro deste card.</p>
                     {filesToUpload.length > 0 ? (
                       <ul className="mt-2 space-y-1 text-xs text-slate-600">
                         {filesToUpload.map((f, i) => {
@@ -442,29 +497,49 @@ export function CardDetailModal({
                           const pct = uploadProgress[key];
                           return (
                             <li key={key} className="flex items-center justify-between gap-2">
-                              <span className="truncate">{f.name}</span>
-                              <span>{pct != null ? `${pct}%` : "pendente"}</span>
+                              <span className="min-w-0 truncate">{f.name}</span>
+                              <span className="flex shrink-0 items-center gap-2">
+                                <button
+                                  type="button"
+                                  disabled={uploading}
+                                  onClick={() =>
+                                    setFilesToUpload((prev) => prev.filter((_, index) => index !== i))
+                                  }
+                                  className="rounded border border-red-300 px-2 py-0.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                                >
+                                  Remover
+                                </button>
+                                <span>{pct != null ? `${pct}%` : "pendente"}</span>
+                              </span>
                             </li>
                           );
                         })}
                       </ul>
                     ) : null}
+                    {err ? <p className="mt-2 text-sm text-red-700">{err}</p> : null}
                     <div className="mt-2">
                       <button
                         type="button"
                         disabled={uploading || filesToUpload.length === 0}
-                        onClick={uploadAttachments}
+                        onClick={() => void uploadAttachments()}
                         className="rounded-lg bg-blue-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-950 disabled:opacity-50"
                       >
                         {uploading ? "Enviando..." : "Enviar anexos"}
                       </button>
                     </div>
                   </div>
+                  ) : null}
                   <div className="mt-2 grid gap-3 sm:grid-cols-2">
                     {(card.media_urls ?? []).map((url) =>
                       isVideoUrl(url) ? (
                         <div key={url} className="rounded-lg border border-slate-200 bg-white p-2">
-                          <video src={url} controls className="w-full rounded-lg bg-black" />
+                          <video
+                            src={url}
+                            controls
+                            controlsList={readOnly ? "nodownload" : undefined}
+                            className="w-full rounded-lg bg-black"
+                          />
+                          {!readOnly ? (
                           <button
                             type="button"
                             onClick={() => removeAttachment(url)}
@@ -472,13 +547,20 @@ export function CardDetailModal({
                           >
                             Apagar anexo
                           </button>
+                          ) : null}
                         </div>
                       ) : isImageUrl(url) ? (
                         <div key={url} className="rounded-lg border border-slate-200 bg-white p-2">
+                          {readOnly ? (
+                            /* eslint-disable-next-line @next/next/no-img-element */
+                            <img src={url} alt="" className="max-h-48 w-full rounded-lg object-contain" />
+                          ) : (
                           <a href={url} target="_blank" rel="noreferrer" className="block">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src={url} alt="" className="max-h-48 w-full rounded-lg object-contain" />
                           </a>
+                          )}
+                          {!readOnly ? (
                           <button
                             type="button"
                             onClick={() => removeAttachment(url)}
@@ -486,9 +568,16 @@ export function CardDetailModal({
                           >
                             Apagar anexo
                           </button>
+                          ) : null}
                         </div>
                       ) : (
                         <div key={url} className="rounded-lg border border-slate-200 bg-white p-2">
+                          {readOnly ? (
+                            <p className="flex items-center gap-2 p-2 text-sm text-slate-700">
+                              <FileText className="h-4 w-4 shrink-0" />
+                              <span className="line-clamp-1">{fileNameFromUrl(url)}</span>
+                            </p>
+                          ) : (
                           <a
                             href={url}
                             target="_blank"
@@ -498,6 +587,8 @@ export function CardDetailModal({
                             <FileText className="h-4 w-4 shrink-0" />
                             <span className="line-clamp-1">{fileNameFromUrl(url)}</span>
                           </a>
+                          )}
+                          {!readOnly ? (
                           <button
                             type="button"
                             onClick={() => removeAttachment(url)}
@@ -505,6 +596,7 @@ export function CardDetailModal({
                           >
                             Apagar anexo
                           </button>
+                          ) : null}
                         </div>
                       ),
                     )}
@@ -575,6 +667,7 @@ export function CardDetailModal({
               ))}
               {comments.length === 0 ? <li className="text-sm text-slate-500">Nenhum comentário.</li> : null}
             </ul>
+            {!readOnly ? (
             <form onSubmit={submitComment} className="border-t border-slate-200 p-4">
               <p className="text-xs text-slate-600">
                 Comentando como <span className="font-semibold text-slate-800">{user?.name ?? "—"}</span>
@@ -592,6 +685,11 @@ export function CardDetailModal({
                 Publicar
               </button>
             </form>
+            ) : (
+              <p className="border-t border-slate-200 p-4 text-xs text-slate-500">
+                Perfil Observador: comentários somente para leitura.
+              </p>
+            )}
           </div>
         </aside>
       </div>

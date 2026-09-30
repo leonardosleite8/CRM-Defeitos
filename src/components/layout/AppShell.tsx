@@ -34,8 +34,8 @@ export function AppShell({
 
   return (
     <AuthProvider user={user}>
-    <div className="flex min-h-screen bg-slate-100 text-slate-900">
-      <aside className="hidden w-56 shrink-0 border-r border-slate-200 bg-slate-900 text-slate-100 md:flex md:flex-col">
+    <div className="flex h-dvh overflow-hidden bg-slate-100 text-slate-900">
+      <aside className="hidden h-full w-56 shrink-0 flex-col border-r border-slate-200 bg-slate-900 text-slate-100 md:flex">
         <div className="border-b border-slate-800 px-4 py-5">
           <Image
             src="/urano-logo.png"
@@ -72,6 +72,9 @@ export function AppShell({
               <div className="px-2">
                 <p className="truncate text-sm font-medium text-white">{user.name}</p>
                 <p className="truncate text-xs text-slate-400">{user.email}</p>
+                {user.role === "observer" ? (
+                  <p className="mt-1 text-xs font-medium text-slate-300">Observador</p>
+                ) : null}
               </div>
               <Link
                 href="/configuracoes"
@@ -103,7 +106,7 @@ export function AppShell({
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-3 md:hidden">
           <h1 className="text-sm font-semibold text-slate-900">Qualidade Urano</h1>
           <div className="flex flex-wrap justify-end gap-2">
@@ -132,7 +135,7 @@ export function AppShell({
             ) : null}
           </div>
         </header>
-        <main className="flex-1 p-4 md:p-6">{children}</main>
+        <main className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
       </div>
     </div>
     </AuthProvider>

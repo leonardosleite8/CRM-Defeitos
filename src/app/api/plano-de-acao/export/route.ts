@@ -11,6 +11,9 @@ export async function POST(request: Request) {
   if (!session) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   }
+  if (session.role === "observer") {
+    return NextResponse.json({ error: "O perfil Observador não pode exportar." }, { status: 403 });
+  }
 
   const body = (await request.json()) as { cardIds?: string[] };
   const cardIds = Array.isArray(body.cardIds) ? body.cardIds.filter(Boolean) : [];

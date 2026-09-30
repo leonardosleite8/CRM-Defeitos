@@ -4,6 +4,7 @@ import { ExcelExportButton } from "@/components/dashboard/ExcelExportButton";
 import { ConfigAlert } from "@/components/ConfigAlert";
 import { MODELOS_PRODUTO, DEFECT_ORIGEM, DEFECT_SEVERIDADE, LINHAS } from "@/lib/constants";
 import type { DefectOrigem, DefectSeveridade } from "@/lib/constants";
+import { getSession } from "@/lib/auth/getSession";
 
 function hasEnv() {
   return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
@@ -28,6 +29,8 @@ export default async function DashboardPage({
     );
   }
 
+  const session = await getSession();
+  const readOnly = session?.role === "observer";
   const data = await getDashboardData({ modelo, severidade, linha, origem });
 
   return (
@@ -35,9 +38,11 @@ export default async function DashboardPage({
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
-          <p className="text-sm text-slate-600">Indicadores e exportação de relatórios.</p>
+          <p className="text-sm text-slate-600">
+            {readOnly ? "Indicadores do período." : "Indicadores e exportação de relatórios."}
+          </p>
         </div>
-        <ExcelExportButton cards={data.cards} etapaByColumnId={data.etapaByColumnId} />
+        {!readOnly ? <ExcelExportButton cards={data.cards} etapaByColumnId={data.etapaByColumnId} /> : null}
       </div>
 
       <form className="flex flex-wrap items-end gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">

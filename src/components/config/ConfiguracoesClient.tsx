@@ -15,7 +15,7 @@ type UserRow = {
   id: string;
   name: string;
   email: string;
-  role: "admin" | "user";
+  role: "admin" | "user" | "observer";
   active: boolean;
   created_at: string;
 };
@@ -48,6 +48,16 @@ export function ConfiguracoesClient({
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">{err}</div>
       ) : null}
 
+      {session.role === "observer" ? (
+        <section className="rounded-xl border border-slate-200 bg-white p-4">
+          <h2 className="text-sm font-semibold text-slate-900">Perfil Observador</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Você pode visualizar quadros, cards, dashboard, entregas e plano de ação. Não é possível
+            alterar dados, comentar, exportar ou baixar arquivos.
+          </p>
+        </section>
+      ) : (
+      <>
       <section className="rounded-xl border border-slate-200 bg-white p-4">
         <h2 className="text-sm font-semibold text-slate-900">Meu nome</h2>
         <form
@@ -117,6 +127,8 @@ export function ConfiguracoesClient({
           </button>
         </form>
       </section>
+      </>
+      )}
 
       {session.role === "admin" ? (
         <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-4">
@@ -169,6 +181,7 @@ export function ConfiguracoesClient({
               Perfil
               <select name="role" className="mt-1 block rounded-md border border-slate-300 px-2 py-1.5 text-sm">
                 <option value="user">Usuário</option>
+                <option value="observer">Observador</option>
                 <option value="admin">Admin</option>
               </select>
             </label>
@@ -238,7 +251,12 @@ export function ConfiguracoesClient({
                           defaultValue={u.role}
                           disabled={pending}
                           onChange={(e) => {
-                            const next = e.target.value === "admin" ? "admin" : "user";
+                            const next =
+                              e.target.value === "admin"
+                                ? "admin"
+                                : e.target.value === "observer"
+                                  ? "observer"
+                                  : "user";
                             if (next === u.role) return;
                             startTransition(async () => {
                               setErr(null);
@@ -259,6 +277,7 @@ export function ConfiguracoesClient({
                           }}
                         >
                           <option value="user">Usuário</option>
+                          <option value="observer">Observador</option>
                           <option value="admin">Admin</option>
                         </select>
                       )}

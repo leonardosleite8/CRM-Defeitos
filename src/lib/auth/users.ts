@@ -1,13 +1,13 @@
 import { createServerSupabase } from "@/lib/supabase/server";
 import { hashPassword } from "@/lib/auth/password";
-import type { SessionUser } from "@/lib/auth/session";
+import type { AppRole, SessionUser } from "@/lib/auth/session";
 
 export type AppUserRow = {
   id: string;
   name: string;
   email: string;
   password_hash: string;
-  role: "admin" | "user";
+  role: AppRole;
   active: boolean;
   created_at: string;
 };

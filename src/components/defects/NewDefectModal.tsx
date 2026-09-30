@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { KanbanColumnRow } from "@/lib/types/db";
 import { MODELOS_PRODUTO, LINHAS, DEFECT_ORIGEM, DEFECT_SEVERIDADE, type DefectOrigem, type DefectSeveridade } from "@/lib/constants";
@@ -41,6 +41,7 @@ export function NewDefectModal({
   const [responsavel, setResponsavel] = useState("");
   const [previsao, setPrevisao] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
   const [progress, setProgress] = useState<ProgressFile[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -274,16 +275,39 @@ export function NewDefectModal({
               />
             </label>
           </div>
-          <label className="block text-sm font-medium text-slate-700">
-            Anexos (fotos, vídeos, PDF, DOC, Excel)
+          <div>
+            <p className="text-sm font-medium text-slate-700">Anexos (fotos, vídeos, PDF, DOC, Excel)</p>
             <input
+              ref={attachmentInputRef}
               type="file"
               multiple
               accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.csv"
-              className="mt-1 w-full text-sm"
-              onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+              className="hidden"
+              onChange={(e) => {
+                const chosen = Array.from(e.target.files ?? []);
+                if (chosen.length > 0) setFiles(chosen);
+                e.target.value = "";
+              }}
             />
-          </label>
+            <button
+              type="button"
+              onClick={() => attachmentInputRef.current?.click()}
+              className="mt-2 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-100"
+            >
+              Escolher arquivos
+            </button>
+            {files.length > 0 ? (
+              <ul className="mt-2 space-y-1 text-xs text-slate-600">
+                {files.map((f) => (
+                  <li key={`${f.name}-${f.size}`} className="truncate">
+                    {f.name}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-xs text-slate-500">Nenhum arquivo escolhido</p>
+            )}
+          </div>
           {progress.length ? (
             <ul className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs">
               {progress.map((p) => (

@@ -11,6 +11,7 @@ import {
 } from "@/lib/constants";
 import { formatDateBR } from "@/lib/date";
 import { Download, Search } from "lucide-react";
+import { useAuth } from "@/components/auth/AuthContext";
 
 function matchesQuery(card: DefectCardRow, q: string): boolean {
   const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -34,6 +35,7 @@ function matchesQuery(card: DefectCardRow, q: string): boolean {
 }
 
 export function PlanoDeAcaoClient({ initialCards }: { initialCards: DefectCardRow[] }) {
+  const readOnly = useAuth()?.role === "observer";
   const [setor, setSetor] = useState("");
   const [modelo, setModelo] = useState("");
   const [linha, setLinha] = useState("");
@@ -115,9 +117,12 @@ export function PlanoDeAcaoClient({ initialCards }: { initialCards: DefectCardRo
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Plano de ação</h1>
           <p className="text-sm text-slate-600">
-            Filtre as demandas e exporte um Word (.doc) por card (vários viram ZIP).
+            {readOnly
+              ? "Consulta das demandas. O perfil Observador não exporta arquivos."
+              : "Filtre as demandas e exporte um Word (.doc) por card (vários viram ZIP)."}
           </p>
         </div>
+        {!readOnly ? (
         <button
           type="button"
           disabled={busy || filtered.length === 0}
@@ -131,6 +136,7 @@ export function PlanoDeAcaoClient({ initialCards }: { initialCards: DefectCardRo
               ? `Exportar selecionados (${selected.size})`
               : `Exportar filtrados (${filtered.length})`}
         </button>
+        ) : null}
       </div>
 
       {err ? (
@@ -233,6 +239,7 @@ export function PlanoDeAcaoClient({ initialCards }: { initialCards: DefectCardRo
         <table className="min-w-full text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase text-slate-500">
             <tr>
+              {!readOnly ? (
               <th className="px-3 py-2">
                 <input
                   type="checkbox"
@@ -241,6 +248,7 @@ export function PlanoDeAcaoClient({ initialCards }: { initialCards: DefectCardRo
                   aria-label="Selecionar todos"
                 />
               </th>
+              ) : null}
               <th className="px-3 py-2">Título</th>
               <th className="px-3 py-2">Responsável</th>
               <th className="px-3 py-2">Setor</th>
@@ -251,6 +259,7 @@ export function PlanoDeAcaoClient({ initialCards }: { initialCards: DefectCardRo
           <tbody>
             {filtered.map((c) => (
               <tr key={c.id} className="border-t border-slate-100 hover:bg-slate-50">
+                {!readOnly ? (
                 <td className="px-3 py-2">
                   <input
                     type="checkbox"
@@ -259,6 +268,7 @@ export function PlanoDeAcaoClient({ initialCards }: { initialCards: DefectCardRo
                     aria-label={`Selecionar ${c.titulo}`}
                   />
                 </td>
+                ) : null}
                 <td className="px-3 py-2 font-medium text-slate-900">{c.titulo}</td>
                 <td className="px-3 py-2 text-slate-700">{c.responsavel || "—"}</td>
                 <td className="px-3 py-2 text-slate-700">{c.setor_responsavel}</td>
@@ -268,7 +278,7 @@ export function PlanoDeAcaoClient({ initialCards }: { initialCards: DefectCardRo
             ))}
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-slate-500">
+                <td colSpan={readOnly ? 5 : 6} className="px-3 py-8 text-center text-slate-500">
                   Nenhum card encontrado com esses filtros.
                 </td>
               </tr>

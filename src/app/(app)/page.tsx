@@ -4,6 +4,7 @@ import { createBoardWithDefaults } from "@/app/actions/defeitos";
 import { ConfigAlert } from "@/components/ConfigAlert";
 import { formatDateBR, formatDateTimeBR } from "@/lib/date";
 import { Plus, LayoutGrid } from "lucide-react";
+import { getSession } from "@/lib/auth/getSession";
 
 function hasEnv() {
   return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
@@ -18,6 +19,9 @@ export default async function HomePage() {
       </div>
     );
   }
+
+  const session = await getSession();
+  const readOnly = session?.role === "observer";
 
   let boards: Awaited<ReturnType<typeof listBoards>> = [];
   let error: string | null = null;
@@ -34,6 +38,7 @@ export default async function HomePage() {
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">Quadros</h1>
           <p className="mt-1 text-base text-slate-600">Gerencie defeitos por quadro Kanban.</p>
         </div>
+        {!readOnly ? (
         <form
           action={async () => {
             "use server";
@@ -50,6 +55,7 @@ export default async function HomePage() {
             Novo quadro
           </button>
         </form>
+        ) : null}
       </div>
 
       {error ? (

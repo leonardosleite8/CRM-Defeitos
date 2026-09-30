@@ -8,6 +8,7 @@ import { formatDateBR, formatMonthYearPT } from "@/lib/date";
 import { CardDetailModal } from "@/components/defects/CardDetailModal";
 import { fetchEntregasAction } from "@/app/actions/entregas";
 import { Download } from "lucide-react";
+import { useAuth } from "@/components/auth/AuthContext";
 
 const MONTHS = [
   { value: 1, label: "Janeiro" },
@@ -51,6 +52,7 @@ export function EntregasClient({
   boardId: string;
 }) {
   const router = useRouter();
+  const readOnly = useAuth()?.role === "observer";
   const [pending, startTransition] = useTransition();
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
@@ -158,6 +160,7 @@ export function EntregasClient({
             Cards concluídos no período — {periodTitle.toLowerCase()}.
           </p>
         </div>
+        {!readOnly ? (
         <button
           type="button"
           onClick={() => void exportExcel()}
@@ -167,6 +170,7 @@ export function EntregasClient({
           <Download className="h-4 w-4" />
           {exporting ? "Gerando Excel…" : "Exportar Excel"}
         </button>
+        ) : null}
       </div>
 
       <form

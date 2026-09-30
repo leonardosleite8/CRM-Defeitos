@@ -4,7 +4,15 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { updateBoardTitulo } from "@/app/actions/defeitos";
 
-export function BoardTitleEditor({ boardId, initialTitulo }: { boardId: string; initialTitulo: string }) {
+export function BoardTitleEditor({
+  boardId,
+  initialTitulo,
+  readOnly = false,
+}: {
+  boardId: string;
+  initialTitulo: string;
+  readOnly?: boolean;
+}) {
   const router = useRouter();
   const [value, setValue] = useState(initialTitulo);
   const [saving, setSaving] = useState(false);
@@ -26,6 +34,15 @@ export function BoardTitleEditor({ boardId, initialTitulo }: { boardId: string; 
       setSaving(false);
     }
   };
+
+  if (readOnly) {
+    return (
+      <div className="max-w-xl">
+        <p className="text-xs font-medium text-slate-600">Nome do quadro</p>
+        <h1 className="mt-1 text-lg font-semibold text-slate-900">{initialTitulo}</h1>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-xl">

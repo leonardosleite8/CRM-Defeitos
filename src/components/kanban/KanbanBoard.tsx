@@ -25,6 +25,7 @@ import {
 import { Plus, Filter, Trash2, Columns3, Search } from "lucide-react";
 import { CardDetailModal } from "@/components/defects/CardDetailModal";
 import { NewDefectModal } from "@/components/defects/NewDefectModal";
+import { useAuth } from "@/components/auth/AuthContext";
 
 type BoardFilters = {
   modelo: string;
@@ -101,6 +102,7 @@ function applyFilteredOrder(
 
 export function KanbanBoard({ boardId, initial }: { boardId: string; initial: BoardPayload }) {
   const router = useRouter();
+  const readOnly = useAuth()?.role === "observer";
   const [detailCardId, setDetailCardId] = useState<string | null>(null);
   const [newCardColumnId, setNewCardColumnId] = useState<string | null>(null);
   const [filterModelo, setFilterModelo] = useState("");
@@ -157,6 +159,7 @@ export function KanbanBoard({ boardId, initial }: { boardId: string; initial: Bo
   );
 
   const onDragEnd = async (result: DropResult) => {
+    if (readOnly) return;
     setErr(null);
     const { destination, source, draggableId, type } = result;
     if (!destination) return;
@@ -327,12 +330,14 @@ export function KanbanBoard({ boardId, initial }: { boardId: string; initial: Bo
       ) : null}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="space-y-2">
-          <BoardTitleEditor boardId={boardId} initialTitulo={initial.board.titulo} />
+          <BoardTitleEditor boardId={boardId} initialTitulo={initial.board.titulo} readOnly={readOnly} />
           <p className="text-sm text-slate-600">
-            Arraste os cards pela faixa &quot;Arrastar&quot; para reordenar na coluna ou mover entre
-            colunas. Toque no card para abrir detalhes.
+            {readOnly
+              ? "Perfil Observador: você pode abrir os cards, sem alterar o quadro."
+              : "Arraste os cards pela faixa \"Arrastar\" para reordenar na coluna ou mover entre colunas. Toque no card para abrir detalhes."}
           </p>
         </div>
+        {!readOnly ? (
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -360,6 +365,7 @@ export function KanbanBoard({ boardId, initial }: { boardId: string; initial: Bo
             Excluir quadro
           </button>
         </div>
+        ) : null}
       </div>
 
       <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3">
@@ -478,7 +484,7 @@ export function KanbanBoard({ boardId, initial }: { boardId: string; initial: Bo
           {(provided) => (
             <div ref={provided.innerRef} {...provided.droppableProps} className="flex gap-4 overflow-x-auto pb-4">
               {initial.columns.map((col, index) => (
-                <Draggable key={col.id} draggableId={`column-${col.id}`} index={index}>
+                <Draggable key={col.id} draggableId={`column-${col.id}`} index={index} isDragDisabled={readOnly}>
                   {(dragProvided) => (
                     <div ref={dragProvided.innerRef} {...dragProvided.draggableProps}>
                       <KanbanColumn
@@ -488,7 +494,8 @@ export function KanbanBoard({ boardId, initial }: { boardId: string; initial: Bo
                         onRenameColumn={handleRenameColumn}
                         onDeleteColumn={handleDeleteColumn}
                         busy={busy}
-                        columnDragHandleProps={dragProvided.dragHandleProps}
+                        readOnly={readOnly}
+                        columnDragHandleProps={readOnly ? null : dragProvided.dragHandleProps}
                       />
                     </div>
                   )}

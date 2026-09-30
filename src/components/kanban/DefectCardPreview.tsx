@@ -45,7 +45,7 @@ export function DefectCardPreview({
           onOpen();
         }
       }}
-      className={`relative rounded-lg border p-3 pr-8 shadow-sm transition hover:shadow-md ${cardTone}`}
+      className={`relative cursor-pointer rounded-lg border p-3 pr-8 shadow-sm transition hover:shadow-md ${cardTone}`}
     >
       {hasMedia ? (
         <span className="absolute right-2 top-2 text-amber-400" title="Anexos">
