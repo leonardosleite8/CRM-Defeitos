@@ -2,7 +2,7 @@
 
 import { createServerSupabase } from "@/lib/supabase/server";
 import type { DefectOrigem, DefectSeveridade, DefectStatus } from "@/lib/constants";
-import { getCardDetail, ensureDefectCardCodigos } from "@/lib/queries/boards";
+import { getCardDetail, getProductOptions, ensureDefectCardCodigos } from "@/lib/queries/boards";
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth/getSession";
 import { assertCanMutate } from "@/lib/auth/guard";
@@ -10,7 +10,19 @@ import { writeAuditLog } from "@/lib/auth/users";
 import { buildFieldDiffDetail } from "@/lib/auditLabels";
 import { formatCardCodigo } from "@/lib/cardCodigo";
 
-function revalidateBoard(boardId: string) {
+/** Qualquer alteração dentro do quadro atualiza a data exibida em Quadros. */
+async function touchBoard(boardId: string) {
+  const supabase = createServerSupabase();
+  const { error } = await supabase
+    .from("boards")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", boardId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/");
+}
+
+async function revalidateBoard(boardId: string) {
+  await touchBoard(boardId);
   revalidatePath(`/quadros/${boardId}`);
   revalidatePath("/");
   revalidatePath("/dashboard");
@@ -73,7 +85,7 @@ export async function updateBoardTitulo(boardId: string, titulo: string) {
   if (!t) throw new Error("Título do quadro não pode ser vazio.");
   const { error } = await supabase.from("boards").update({ titulo: t }).eq("id", boardId);
   if (error) throw new Error(error.message);
-  revalidateBoard(boardId);
+  await revalidateBoard(boardId);
 }
 
 export async function createBoardWithDefaults(titulo: string) {
@@ -127,7 +139,7 @@ export async function createColumn(boardId: string, titulo: string) {
     status_ref: null,
   });
   if (error) throw new Error(error.message);
-  revalidateBoard(boardId);
+  await revalidateBoard(boardId);
 }
 
 export async function renameColumn(columnId: string, boardId: string, titulo: string) {
@@ -137,7 +149,7 @@ export async function renameColumn(columnId: string, boardId: string, titulo: st
   if (!t) throw new Error("Nome da coluna não pode ser vazio.");
   const { error } = await supabase.from("kanban_columns").update({ titulo: t }).eq("id", columnId);
   if (error) throw new Error(error.message);
-  revalidateBoard(boardId);
+  await revalidateBoard(boardId);
 }
 
 export async function deleteColumn(columnId: string, boardId: string) {
@@ -152,7 +164,7 @@ export async function deleteColumn(columnId: string, boardId: string) {
   }
   const { error } = await supabase.from("kanban_columns").delete().eq("id", columnId);
   if (error) throw new Error(error.message);
-  revalidateBoard(boardId);
+  await revalidateBoard(boardId);
 }
 
 export async function reorderColumns(boardId: string, orderedColumnIds: string[]) {
@@ -165,7 +177,7 @@ export async function reorderColumns(boardId: string, orderedColumnIds: string[]
   const results = await Promise.all(updates);
   const failed = results.find((r) => r.error);
   if (failed?.error) throw new Error(failed.error.message);
-  revalidateBoard(boardId);
+  await revalidateBoard(boardId);
 }
 
 export async function createDefectCard(input: {
@@ -290,7 +302,7 @@ export async function createDefectCard(input: {
     detail: cardLabel(card),
   });
 
-  revalidateBoard(input.boardId);
+  await revalidateBoard(input.boardId);
   return card.id as string;
 }
 
@@ -314,7 +326,7 @@ export async function updateDefectCardMedia(cardId: string, boardId: string, med
     action: "card_update",
     detail: `${cardLabel(before ?? { id: cardId })}${diff ? ` — ${diff}` : ""}`,
   });
-  revalidateBoard(boardId);
+  await revalidateBoard(boardId);
 }
 
 export async function reorderCardsInColumn(
@@ -332,6 +344,7 @@ export async function reorderCardsInColumn(
   });
 
   if (!rpcError) {
+    await touchBoard(boardId);
     return;
   }
 
@@ -397,6 +410,7 @@ export async function reorderCardsInColumn(
         }),
     );
   })();
+  await touchBoard(boardId);
 }
 
 export async function moveCardToColumn(
@@ -466,6 +480,7 @@ export async function moveCardToColumn(
     action: "card_move",
     detail: `${cardLabel(before ?? { id: cardId })}: "${fromTitle}" → "${col?.titulo ?? newColumnId}"`,
   });
+  await touchBoard(boardId);
 }
 
 export async function updateDefectCardFields(
@@ -521,7 +536,7 @@ export async function updateDefectCardFields(
     }
   }
 
-  revalidateBoard(boardId);
+  await revalidateBoard(boardId);
 }
 
 export async function deleteDefectCard(cardId: string, boardId: string) {
@@ -539,9 +554,7 @@ export async function deleteDefectCard(cardId: string, boardId: string) {
     action: "card_delete",
     detail: cardLabel(before ?? { id: cardId }),
   });
-  revalidatePath(`/quadros/${boardId}`);
-  revalidatePath("/");
-  revalidatePath("/dashboard");
+  await revalidateBoard(boardId);
 }
 
 export async function addComment(cardId: string, boardId: string, texto: string, _autorIgnored?: string) {
@@ -568,7 +581,7 @@ export async function addComment(cardId: string, boardId: string, texto: string,
     action: "comment_create",
     detail: `${cardLabel(card ?? { id: cardId })} — autor: ${autor}`,
   });
-  revalidateBoard(boardId);
+  await revalidateBoard(boardId);
 }
 
 export async function updateComment(
@@ -622,9 +635,13 @@ export async function updateComment(
     action: "comment_update",
     detail: cardLabel(card ?? { id: cardId }),
   });
-  revalidateBoard(boardId);
+  await revalidateBoard(boardId);
 }
 
 export async function fetchCardDetail(cardId: string) {
   return getCardDetail(cardId);
+}
+
+export async function fetchProductOptions() {
+  return getProductOptions();
 }

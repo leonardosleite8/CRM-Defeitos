@@ -2,7 +2,7 @@ import { getDashboardData } from "@/lib/queries/boards";
 import { DashboardCharts } from "@/components/dashboard/DashboardCharts";
 import { ExcelExportButton } from "@/components/dashboard/ExcelExportButton";
 import { ConfigAlert } from "@/components/ConfigAlert";
-import { MODELOS_PRODUTO, DEFECT_ORIGEM, DEFECT_SEVERIDADE, LINHAS } from "@/lib/constants";
+import { DEFECT_ORIGEM, DEFECT_SEVERIDADE } from "@/lib/constants";
 import type { DefectOrigem, DefectSeveridade } from "@/lib/constants";
 import { getSession } from "@/lib/auth/getSession";
 
@@ -54,7 +54,7 @@ export default async function DashboardPage({
             className="mt-1 block rounded-md border border-slate-300 px-2 py-2 text-sm"
           >
             <option value="">Todos</option>
-            {MODELOS_PRODUTO.map((m) => (
+            {data.productOptions.modelos.map((m) => (
               <option key={m} value={m}>
                 {m}
               </option>
@@ -69,7 +69,7 @@ export default async function DashboardPage({
             className="mt-1 block rounded-md border border-slate-300 px-2 py-2 text-sm"
           >
             <option value="">Todas</option>
-            {LINHAS.map((l) => (
+            {data.productOptions.linhas.map((l) => (
               <option key={l} value={l}>
                 {l}
               </option>

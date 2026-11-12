@@ -7,6 +7,7 @@ import { MODELOS_PRODUTO, LINHAS, DEFECT_ORIGEM, DEFECT_SEVERIDADE, type DefectO
 import { parseDateBRToISO } from "@/lib/date";
 import { createDefectCard, updateDefectCardMedia } from "@/app/actions/defeitos";
 import { uploadFileWithProgress, buildStoragePath } from "@/lib/upload";
+import { mergeOptions } from "@/lib/productOptions";
 import { CreatableMultiSelect } from "./CreatableMultiSelect";
 import { DateBRPickerInput } from "./DateBRPickerInput";
 import { X } from "lucide-react";
@@ -18,12 +19,16 @@ export function NewDefectModal({
   boardId,
   columnId,
   columns,
+  modeloOptionsBase = MODELOS_PRODUTO,
+  linhaOptionsBase = LINHAS,
   onClose,
 }: {
   open: boolean;
   boardId: string;
   columnId: string | null;
   columns: KanbanColumnRow[];
+  modeloOptionsBase?: readonly string[];
+  linhaOptionsBase?: readonly string[];
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -36,8 +41,8 @@ export function NewDefectModal({
   const [severidade, setSeveridade] = useState<DefectSeveridade>("Baixa");
   const [modelos, setModelos] = useState<string[]>([]);
   const [linhas, setLinhas] = useState<string[]>([]);
-  const [modeloOptions, setModeloOptions] = useState<string[]>([...MODELOS_PRODUTO]);
-  const [linhaOptions, setLinhaOptions] = useState<string[]>([...LINHAS]);
+  const [modeloOptions, setModeloOptions] = useState<string[]>([...modeloOptionsBase]);
+  const [linhaOptions, setLinhaOptions] = useState<string[]>([...linhaOptionsBase]);
   const [responsavel, setResponsavel] = useState("");
   const [previsao, setPrevisao] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -51,6 +56,12 @@ export function NewDefectModal({
     else if (open && columns[0]?.id) setCol(columns[0].id);
   }, [open, columnId, columns]);
 
+  useEffect(() => {
+    if (!open) return;
+    setModeloOptions((prev) => mergeOptions(modeloOptionsBase, prev));
+    setLinhaOptions((prev) => mergeOptions(linhaOptionsBase, prev));
+  }, [open, modeloOptionsBase, linhaOptionsBase]);
+
   if (!open) return null;
 
   const reset = () => {
@@ -62,8 +73,8 @@ export function NewDefectModal({
     setSeveridade("Baixa");
     setModelos([]);
     setLinhas([]);
-    setModeloOptions([...MODELOS_PRODUTO]);
-    setLinhaOptions([...LINHAS]);
+    setModeloOptions([...modeloOptionsBase]);
+    setLinhaOptions([...linhaOptionsBase]);
     setResponsavel("");
     setPrevisao("");
     setFiles([]);

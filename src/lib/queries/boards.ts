@@ -2,6 +2,7 @@ import { createServerSupabase } from "@/lib/supabase/server";
 import type { BoardPayload, DefectCardRow, KanbanColumnRow } from "@/lib/types/db";
 import type { DefectSeveridade, DefectOrigem } from "@/lib/constants";
 import { periodBoundsSaoPaulo } from "@/lib/date";
+import { productOptionsFromCards } from "@/lib/productOptions";
 
 function tryParseJsonArray(s: string): string[] | null {
   const t = s.trim();
@@ -186,13 +187,23 @@ export type DashboardFilters = {
 export async function getDashboardData(filters: DashboardFilters = {}) {
   const supabase = createServerSupabase();
   let q = supabase.from("defect_cards").select("*");
-  if (filters.modelo) q = q.contains("modelo_produto", [filters.modelo]);
-  if (filters.linha) q = q.contains("linha", [filters.linha]);
   if (filters.severidade) q = q.eq("severidade", filters.severidade);
   if (filters.origem) q = q.eq("origem", filters.origem);
   const { data: cards, error } = await q;
   if (error) throw new Error(error.message);
-  const list = (cards ?? []).map((c) => normalizeCard(c as Record<string, unknown>));
+  // modelo_produto/linha ficam gravados como texto JSON: o filtro precisa ser feito após normalizar.
+  const list = (cards ?? [])
+    .map((c) => normalizeCard(c as Record<string, unknown>))
+    .filter((c) => !filters.modelo || c.modelo_produto.includes(filters.modelo))
+    .filter((c) => !filters.linha || c.linha.includes(filters.linha));
+
+  const { data: optionRows } = await supabase.from("defect_cards").select("modelo_produto,linha");
+  const productOptions = productOptionsFromCards(
+    (optionRows ?? []).map((r) => ({
+      modelo_produto: asStringArray(r.modelo_produto),
+      linha: asStringArray(r.linha),
+    })),
+  );
 
   const { data: columns } = await supabase.from("kanban_columns").select("id,titulo");
   const etapaByColumnId = new Map((columns ?? []).map((c) => [c.id as string, c.titulo as string]));
@@ -227,7 +238,20 @@ export async function getDashboardData(filters: DashboardFilters = {}) {
     chartSev: Array.from(bySev.entries()).map(([name, value]) => ({ name, value })),
     leadTimeDays,
     total: list.length,
+    productOptions,
   };
+}
+
+export async function getProductOptions() {
+  const supabase = createServerSupabase();
+  const { data, error } = await supabase.from("defect_cards").select("modelo_produto,linha");
+  if (error) throw new Error(error.message);
+  return productOptionsFromCards(
+    (data ?? []).map((r) => ({
+      modelo_produto: asStringArray(r.modelo_produto),
+      linha: asStringArray(r.linha),
+    })),
+  );
 }
 
 export type EntregaCardRow = DefectCardRow & {

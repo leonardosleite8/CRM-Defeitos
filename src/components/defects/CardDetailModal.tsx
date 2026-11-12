@@ -2,7 +2,15 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { fetchCardDetail, addComment, deleteDefectCard, updateDefectCardFields, updateComment } from "@/app/actions/defeitos";
+import {
+  fetchCardDetail,
+  fetchProductOptions,
+  addComment,
+  deleteDefectCard,
+  updateDefectCardFields,
+  updateComment,
+} from "@/app/actions/defeitos";
+import { mergeOptions } from "@/lib/productOptions";
 import type { DefectCardRow, DefectCommentRow } from "@/lib/types/db";
 import {
   DEFECT_STATUS,
@@ -92,8 +100,11 @@ export function CardDetailModal({
     let cancelled = false;
     setLoading(true);
     setErr(null);
-    fetchCardDetail(cardId)
-      .then((d) => {
+    Promise.all([
+      fetchCardDetail(cardId),
+      fetchProductOptions().catch(() => ({ modelos: [...MODELOS_PRODUTO], linhas: [...LINHAS] })),
+    ])
+      .then(([d, opts]) => {
         if (cancelled) return;
         const c = d.card as DefectCardRow;
         setCard(c);
@@ -108,8 +119,8 @@ export function CardDetailModal({
         setEditSev(c.severidade);
         setEditModelos([...(c.modelo_produto ?? [])]);
         setEditLinhas([...(c.linha ?? [])]);
-        setModeloOptions(Array.from(new Set([...MODELOS_PRODUTO, ...(c.modelo_produto ?? [])])));
-        setLinhaOptions(Array.from(new Set([...LINHAS, ...(c.linha ?? [])])));
+        setModeloOptions(mergeOptions(opts.modelos, c.modelo_produto ?? []));
+        setLinhaOptions(mergeOptions(opts.linhas, c.linha ?? []));
         setEditPrevisao(isoToDateBRInput(c.previsao_conclusao));
       })
       .catch((e) => setErr(e instanceof Error ? e.message : "Erro ao carregar"))

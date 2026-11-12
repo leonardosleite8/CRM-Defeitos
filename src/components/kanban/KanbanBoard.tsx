@@ -15,13 +15,8 @@ import {
   reorderColumns,
   reorderCardsInColumn,
 } from "@/app/actions/defeitos";
-import {
-  DEFECT_ORIGEM,
-  DEFECT_SEVERIDADE,
-  DEFECT_STATUS,
-  LINHAS,
-  MODELOS_PRODUTO,
-} from "@/lib/constants";
+import { DEFECT_ORIGEM, DEFECT_SEVERIDADE, DEFECT_STATUS } from "@/lib/constants";
+import { productOptionsFromCards } from "@/lib/productOptions";
 import { Plus, Filter, Trash2, Columns3, Search } from "lucide-react";
 import { CardDetailModal } from "@/components/defects/CardDetailModal";
 import { NewDefectModal } from "@/components/defects/NewDefectModal";
@@ -152,6 +147,8 @@ export function KanbanBoard({ boardId, initial }: { boardId: string; initial: Bo
       }),
     [cards, filterModelo, filterLinha, filterOrigem, filterSetor, filterStatus, filterSev, filterQ],
   );
+
+  const productOptions = useMemo(() => productOptionsFromCards(cards), [cards]);
 
   const byColumn = useCallback(
     (colId: string) => sortByOrdem(filtered.filter((c) => c.column_id === colId)),
@@ -382,7 +379,7 @@ export function KanbanBoard({ boardId, initial }: { boardId: string; initial: Bo
               onChange={(e) => setFilterModelo(e.target.value)}
             >
               <option value="">Todos</option>
-              {MODELOS_PRODUTO.map((m) => (
+              {productOptions.modelos.map((m) => (
                 <option key={m} value={m}>
                   {m}
                 </option>
@@ -397,7 +394,7 @@ export function KanbanBoard({ boardId, initial }: { boardId: string; initial: Bo
               onChange={(e) => setFilterLinha(e.target.value)}
             >
               <option value="">Todas</option>
-              {LINHAS.map((l) => (
+              {productOptions.linhas.map((l) => (
                 <option key={l} value={l}>
                   {l}
                 </option>
@@ -519,6 +516,8 @@ export function KanbanBoard({ boardId, initial }: { boardId: string; initial: Bo
         boardId={boardId}
         columnId={newCardColumnId}
         columns={initial.columns}
+        modeloOptionsBase={productOptions.modelos}
+        linhaOptionsBase={productOptions.linhas}
         onClose={() => setNewCardColumnId(null)}
       />
     </div>

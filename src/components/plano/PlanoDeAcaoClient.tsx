@@ -2,13 +2,8 @@
 
 import { useMemo, useState } from "react";
 import type { DefectCardRow } from "@/lib/types/db";
-import {
-  DEFECT_ORIGEM,
-  DEFECT_SEVERIDADE,
-  DEFECT_STATUS,
-  LINHAS,
-  MODELOS_PRODUTO,
-} from "@/lib/constants";
+import { DEFECT_ORIGEM, DEFECT_SEVERIDADE, DEFECT_STATUS } from "@/lib/constants";
+import { productOptionsFromCards } from "@/lib/productOptions";
 import { formatDateBR } from "@/lib/date";
 import { Download, Search } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthContext";
@@ -45,6 +40,8 @@ export function PlanoDeAcaoClient({ initialCards }: { initialCards: DefectCardRo
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  const productOptions = useMemo(() => productOptionsFromCards(initialCards), [initialCards]);
 
   const filtered = useMemo(() => {
     return initialCards.filter((c) => {
@@ -168,7 +165,7 @@ export function PlanoDeAcaoClient({ initialCards }: { initialCards: DefectCardRo
               onChange={(e) => setModelo(e.target.value)}
             >
               <option value="">Todos</option>
-              {MODELOS_PRODUTO.map((m) => (
+              {productOptions.modelos.map((m) => (
                 <option key={m} value={m}>
                   {m}
                 </option>
@@ -183,7 +180,7 @@ export function PlanoDeAcaoClient({ initialCards }: { initialCards: DefectCardRo
               onChange={(e) => setLinha(e.target.value)}
             >
               <option value="">Todas</option>
-              {LINHAS.map((l) => (
+              {productOptions.linhas.map((l) => (
                 <option key={l} value={l}>
                   {l}
                 </option>
